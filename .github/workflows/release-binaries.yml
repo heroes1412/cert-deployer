@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '**/*.go'
+      - '**/go.mod'
+      - '**/go.sum'
+      - 'server/templates/**'
+      - 'client/config.yaml.example'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -51,7 +58,8 @@ jobs:
       - name: Generate Dynamic Release Tag
         id: release_tag
         run: |
-          TAG_NAME="v1.0.${{ github.run_number }}"
+          DATE_STR=$(date +'%d%m%Y')
+          TAG_NAME="v${DATE_STR}-b${{ github.run_number }}"
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
 
       - name: Create GitHub Release & Upload Assets
