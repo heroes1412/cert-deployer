@@ -75,7 +75,7 @@ All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Adm
 - Auto-detects `./config.yaml` in the current working directory if `-c` is omitted.
 - Supports both Linux (`sh -c`) and Windows (`cmd /c`) shell command and script file execution.
 - Global commands (`global_pre_cmd`, `global_post_cmd`) and per-certificate commands (`pre_cmd`, `post_cmd`).
-- Robust Windows path preprocessing: handles backslashes `\` (`"D:\tmp\1 1\expired.pem"`) without YAML escape errors.
+- Robust Windows path preprocessing: supports natural single backslashes `\` (`"D:\tmp\1 1\expired.pem"`) without YAML escape errors.
 - Atomic file writes using temporary files and atomic `os.Rename`.
 - Preserves existing file permissions (Mode) and ownership (UID/GID on Linux/Unix).
 - Strict file permission `0600` fallback for new private key files (`0644` for public certs).
@@ -125,8 +125,8 @@ global_pre_cmd: "echo 'Starting cert sync session...'"
 
 certs:
   - servercert_name: "prod_web_cert"
-    certfile: "D:\\vnshell\\it\\Linux\\prod_web.crt"
-    keyfile: "D:\\vnshell\\it\\Linux\\prod_web.key"
+    certfile: "D:\vnshell\it\Linux\prod_web.crt"
+    keyfile: "D:\vnshell\it\Linux\prod_web.key"
     pre_cmd: "nginx -t"
     post_cmd: "systemctl reload nginx"
 
@@ -139,24 +139,24 @@ global_post_cmd: "echo 'Cert sync session completed successfully!'"
 
 1. **Standard `.bat` / `.cmd` Script**:
    ```yaml
-   global_pre_cmd: "C:\\scripts\\pre_check.bat"
+   global_pre_cmd: "C:\scripts\pre_check.bat"
    # Or unquoted:
    global_pre_cmd: C:\scripts\pre_check.bat
    ```
 
 2. **Script Path with Spaces**:
    ```yaml
-   global_pre_cmd: '"C:\Scripts Vault\pre_check.bat"'
+   global_pre_cmd: '"C:\My Scripts\pre_check.bat"'
    ```
 
 3. **PowerShell Script (`.ps1`)**:
    ```yaml
-   global_pre_cmd: "powershell -ExecutionPolicy Bypass -File C:\\scripts\\pre_check.ps1"
+   global_pre_cmd: "powershell -ExecutionPolicy Bypass -File C:\scripts\pre_check.ps1"
    ```
 
 4. **Script with Arguments**:
    ```yaml
-   global_pre_cmd: "C:\\scripts\\pre_check.bat --env prod --port 8080"
+   global_pre_cmd: "C:\scripts\pre_check.bat --env prod --port 8080"
    ```
 
 5. **Inline Commands**:

@@ -13,8 +13,8 @@ global_pre_cmd: "echo 'Starting global pre-check session...'"
 certs:
   # Nginx example: separate certfile and keyfile with per-cert pre_cmd / post_cmd
   - servercert_name: "prod_web_cert"
-    certfile: "D:\\vnshell\\it\\Linux\\prod_web.crt"
-    keyfile: "D:\\vnshell\\it\\Linux\\prod_web.key"
+    certfile: "D:\vnshell\it\Linux\prod_web.crt"
+    keyfile: "D:\vnshell\it\Linux\prod_web.key"
     pre_cmd: "nginx -t"
     post_cmd: "systemctl reload nginx"
   
