@@ -1,0 +1,70 @@
+name: Build & Release Binaries
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Multi-OS Binaries & Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+          cache: true
+
+      - name: Build Binaries & Package Archives
+        run: |
+          mkdir -p release_assets
+
+          # 1. Windows amd64
+          echo "Building for Windows amd64..."
+          (cd server && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-server.exe .)
+          (cd client && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-agent.exe .)
+          zip -j release_assets/cert-deployer-server-windows-amd64.zip server/cert-deployer-server.exe client/config.yaml.example
+          zip -j release_assets/cert-deployer-agent-windows-amd64.zip client/cert-deployer-agent.exe client/config.yaml.example
+
+          # 2. Linux amd64
+          echo "Building for Linux amd64..."
+          (cd server && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-server .)
+          (cd client && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-agent .)
+          tar -czvf release_assets/cert-deployer-server-linux-amd64.tar.gz -C server cert-deployer-server -C ../client config.yaml.example
+          tar -czvf release_assets/cert-deployer-agent-linux-amd64.tar.gz -C client cert-deployer-agent -C ../client config.yaml.example
+
+          # 3. Linux arm64
+          echo "Building for Linux arm64..."
+          (cd server && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-deployer-server-arm64 .)
+          (cd client && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-deployer-agent-arm64 .)
+          tar -czvf release_assets/cert-deployer-server-linux-arm64.tar.gz -C server cert-deployer-server-arm64 -C ../client config.yaml.example
+          tar -czvf release_assets/cert-deployer-agent-linux-arm64.tar.gz -C client cert-deployer-agent-arm64 -C ../client config.yaml.example
+
+      - name: Generate Dynamic Release Tag
+        id: release_tag
+        run: |
+          TAG_NAME="v1.0.${{ github.run_number }}"
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+
+      - name: Create GitHub Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: "Release ${{ env.TAG_NAME }}"
+          body: |
+            Automated production binary release for **cert-deployer**.
+            
+            Includes Server & Client Agent binaries compiled for Windows (amd64) and Linux (amd64, arm64), packaged together with `config.yaml.example`.
+          files: release_assets/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
