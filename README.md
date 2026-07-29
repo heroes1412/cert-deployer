@@ -68,27 +68,29 @@ go build -o cert-agent main.go
 
 ---
 
-## 3. System Services Setup (Windows NSSM & Linux Systemd)
+## 3. Native System Services Setup (Windows sc.exe & Linux Systemd)
 
-### Question & Architecture FAQ
-- **Q: Does `cert-server` need code modifications to run as a Windows Service via NSSM?**
-  * **Answer: NO.** NSSM (Non-Sucking Service Manager) acts as a transparent Windows SCM wrapper around standard console applications. `cert-server.exe` runs 100% out of the box with NSSM without any code changes.
-- **Q: Can `cert-server` and `cert-agent` run under Linux `systemctl` / `systemd`?**
-  * **Answer: YES.** Standard Linux binaries execute natively as `systemd` services (`Type=simple` for server, `Type=oneshot` + `timer` for client agent).
+### A. Windows Service Setup (Native `sc.exe`)
+No third-party tools (like NSSM) required. Uses Windows native `sc.exe`:
 
-### A. Windows Service Setup (via NSSM)
 1. Build binaries using `build.bat`.
 2. Run `scripts/service_install_windows.bat` as Administrator:
    ```cmd
    scripts\service_install_windows.bat
    ```
-   Or manage manually via NSSM:
+   Or register manually via Windows Command Prompt (Admin):
    ```cmd
-   nssm install CertVaultServer "C:\path\to\build\windows\cert-server.exe"
-   nssm start CertVaultServer
+   sc create CertVaultServer binPath= "C:\path\to\build\windows\cert-server.exe" start= auto displayname= "Cert Vault Server Service"
+   sc start CertVaultServer
+   ```
+   Useful Service commands:
+   ```cmd
+   sc query CertVaultServer
+   sc stop CertVaultServer
+   sc delete CertVaultServer
    ```
 
-### B. Linux Service Setup (via Systemd)
+### B. Linux Service Setup (Native Systemd)
 Run automated Linux service installer script as root:
 ```bash
 sudo ./scripts/service_install_linux.sh
