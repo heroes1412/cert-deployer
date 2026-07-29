@@ -18,7 +18,7 @@ The repository is structured into two independent components:
 - Automatic X.509 certificate parsing and public/private key cryptographic consistency check prior to saving.
 - Download Cert (`.crt`) and Download Key (`.key`) buttons directly from the Web UI modal.
 - API Bearer Token generation and revocation with 1-click Copy Token button.
-- Token Masking (displays `a1b2c...8y9z0`) & Audit Logging (`last_used_at` & `last_used_ip`).
+- Clean 1-Token Card UI View & 100% Read-Only Token Authentication for high CCU performance.
 - Change Admin Password & Configurable HTTP Management Port via Web UI Settings Modal.
 - REST API protected by Bearer Token Authorization.
 - Native Windows Service support (via Windows SCM) with automatic error logging to `cert-server.log`.
@@ -132,3 +132,55 @@ certs:
 
 global_post_cmd: "echo 'Cert sync session completed successfully!'"
 ```
+
+### Script & Command Declaration Examples
+
+#### Windows (`cmd.exe`)
+
+1. **Standard `.bat` / `.cmd` Script**:
+   ```yaml
+   global_pre_cmd: "C:\\scripts\\pre_check.bat"
+   # Or unquoted:
+   global_pre_cmd: C:\scripts\pre_check.bat
+   ```
+
+2. **Script Path with Spaces**:
+   ```yaml
+   global_pre_cmd: '"C:\Scripts Vault\pre_check.bat"'
+   ```
+
+3. **PowerShell Script (`.ps1`)**:
+   ```yaml
+   global_pre_cmd: "powershell -ExecutionPolicy Bypass -File C:\\scripts\\pre_check.ps1"
+   ```
+
+4. **Script with Arguments**:
+   ```yaml
+   global_pre_cmd: "C:\\scripts\\pre_check.bat --env prod --port 8080"
+   ```
+
+5. **Inline Commands**:
+   ```yaml
+   global_pre_cmd: "copy nul c:\global_precmd.txt"
+   ```
+
+---
+
+#### Linux (`sh`)
+
+1. **Shell Script (`.sh`)**:
+   ```yaml
+   global_pre_cmd: "/usr/local/bin/pre_check.sh"
+   # Or via bash:
+   global_pre_cmd: "bash /etc/cert-agent/scripts/pre_check.sh"
+   ```
+
+2. **Script with Arguments**:
+   ```yaml
+   global_pre_cmd: "/usr/local/bin/pre_check.sh --check-all"
+   ```
+
+3. **Inline Commands**:
+   ```yaml
+   global_pre_cmd: "nginx -t && systemctl reload nginx"
+   ```
