@@ -1,4 +1,5 @@
-# Binaries
+# Binaries & Build Output
+build/
 server/cert-server
 server/cert-server.exe
 server/cert-server.exe~

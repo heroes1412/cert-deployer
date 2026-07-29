@@ -100,7 +100,7 @@
                             <th class="p-4">ServerCert Name</th>
                             <th class="p-4">SHA256 Fingerprint</th>
                             <th class="p-4">Expiration Date</th>
-                            <th class="p-4">Days Left</th>
+                            <th class="p-4">Status / Days Left</th>
                             <th class="p-4">Last Updated</th>
                             <th class="p-4 text-right">Actions</th>
                         </tr>
@@ -123,13 +123,17 @@
                             </td>
                             <td class="p-4">{{ .NotAfterFormatted }}</td>
                             <td class="p-4">
-                                {{ if .IsWarning }}
+                                {{ if .IsExpired }}
+                                <span class="bg-red-500/10 text-red-400 border border-red-500/30 px-2.5 py-1 rounded-full text-[11px] font-semibold">
+                                    🚫 ĐÃ HẾT HẠN ({{ .DaysRemaining }}d)
+                                </span>
+                                {{ else if .IsWarning }}
                                 <span class="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-[11px] font-semibold">
-                                    {{ .DaysRemaining }} days (Expiring Soon)
+                                    ⚠️ {{ .DaysRemaining }} days (Expiring Soon)
                                 </span>
                                 {{ else }}
                                 <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[11px] font-semibold">
-                                    {{ .DaysRemaining }} days
+                                    ✅ {{ .DaysRemaining }} days
                                 </span>
                                 {{ end }}
                             </td>

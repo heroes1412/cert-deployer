@@ -30,6 +30,7 @@ type CertViewModel struct {
 	SHA256Short        string
 	NotAfterFormatted  string
 	DaysRemaining      int
+	IsExpired          bool
 	IsWarning          bool
 	UpdatedAtFormatted string
 }
@@ -95,6 +96,9 @@ func ShowDashboard(c *gin.Context) {
 		if len(shaShort) > 16 {
 			shaShort = shaShort[:16] + "..."
 		}
+		isExpired := daysLeft < 0 || cert.NotAfter.Before(now)
+		isWarning := !isExpired && daysLeft < 30
+
 		certVMs = append(certVMs, CertViewModel{
 			Name:               cert.ServercertName,
 			CertData:           cert.CertData,
@@ -103,7 +107,8 @@ func ShowDashboard(c *gin.Context) {
 			SHA256Short:        shaShort,
 			NotAfterFormatted:  cert.NotAfter.Format("2006-01-02 15:04:05 UTC"),
 			DaysRemaining:      daysLeft,
-			IsWarning:          daysLeft < 30,
+			IsExpired:          isExpired,
+			IsWarning:          isWarning,
 			UpdatedAtFormatted: cert.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
