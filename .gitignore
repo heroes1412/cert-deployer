@@ -8,6 +8,9 @@ client/cert-agent.exe
 
 # Requirement & Scratch Fix Files
 Fix*
+fix*
+Fix*.txt
+fix*.txt
 
 # Database & Storage
 *.db

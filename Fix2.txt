@@ -1,3 +1,0 @@
-﻿- issue1: date hết hạn nhưng lại thể hiện -2401 days (Expiring Soon), expiring soon k đúng, phải là ĐÃ HẾT HẠN
-- issue2: chưa build được client, file main.go k tồn tại
-- issue3: tạo các file bat/sh build server, client cho windows/linux luôn
