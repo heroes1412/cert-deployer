@@ -19,11 +19,27 @@ type CertMapping struct {
 }
 
 type Config struct {
-	ServerURL string        `yaml:"server_url"`
-	AuthToken string        `yaml:"auth_token"`
-	PreCmd    string        `yaml:"pre_cmd"`
-	Certs     []CertMapping `yaml:"certs"`
-	PostCmd   string        `yaml:"post_cmd"`
+	ServerURL     string        `yaml:"server_url"`
+	AuthToken     string        `yaml:"auth_token"`
+	GlobalPreCmd  string        `yaml:"global_pre_cmd"`
+	PreCmd        string        `yaml:"pre_cmd"`
+	Certs         []CertMapping `yaml:"certs"`
+	GlobalPostCmd string        `yaml:"global_post_cmd"`
+	PostCmd       string        `yaml:"post_cmd"`
+}
+
+func (c *Config) GetGlobalPreCmd() string {
+	if strings.TrimSpace(c.GlobalPreCmd) != "" {
+		return c.GlobalPreCmd
+	}
+	return c.PreCmd
+}
+
+func (c *Config) GetGlobalPostCmd() string {
+	if strings.TrimSpace(c.GlobalPostCmd) != "" {
+		return c.GlobalPostCmd
+	}
+	return c.PostCmd
 }
 
 // preprocessYAML cleans invalid Windows backslash escapes (e.g. \v, \i, \L, \S, \e, \p)

@@ -58,10 +58,11 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		// 1. Run global pre_cmd
-		if cfg.PreCmd != "" {
-			logInfo("Running global pre_cmd: %s", cfg.PreCmd)
-			out, err := agent.ExecuteCommand(cfg.PreCmd, 30*time.Second)
+		// 1. Run global_pre_cmd / pre_cmd
+		globalPre := cfg.GetGlobalPreCmd()
+		if globalPre != "" {
+			logInfo("Running global pre_cmd: %s", globalPre)
+			out, err := agent.ExecuteCommand(globalPre, 30*time.Second)
 			if err != nil {
 				logError("Global pre_cmd failed: %v. Aborting update!", err)
 				os.Exit(1)
@@ -78,7 +79,7 @@ var syncCmd = &cobra.Command{
 		for _, cert := range cfg.Certs {
 			logInfo("Processing cert mapping: %s", cert.ServercertName)
 
-			// Issue 6 & 7: Check local file existence before attempting sync
+			// Check local file existence before attempting sync
 			if !fileExists(cert.CertFile) {
 				logWarn("Local certfile does not exist (%s) for %s. Skipping cert update.", cert.CertFile, cert.ServercertName)
 				continue
@@ -88,7 +89,7 @@ var syncCmd = &cobra.Command{
 				continue
 			}
 
-			// Issue 5: Per-cert pre_cmd
+			// Per-cert pre_cmd
 			if cert.PreCmd != "" {
 				logInfo("Running per-cert pre_cmd for %s: %s", cert.ServercertName, cert.PreCmd)
 				out, err := agent.ExecuteCommand(cert.PreCmd, 30*time.Second)
@@ -148,7 +149,7 @@ var syncCmd = &cobra.Command{
 			logInfo("Successfully updated certificate files for %s", cert.ServercertName)
 			updatedCount++
 
-			// Issue 5: Per-cert post_cmd
+			// Per-cert post_cmd
 			if cert.PostCmd != "" {
 				logInfo("Running per-cert post_cmd for %s: %s", cert.ServercertName, cert.PostCmd)
 				out, err := agent.ExecuteCommand(cert.PostCmd, 30*time.Second)
@@ -162,10 +163,11 @@ var syncCmd = &cobra.Command{
 
 		logInfo("Synchronization complete. Total certificates updated: %d", updatedCount)
 
-		// 3. Run global post_cmd if at least one cert was updated
-		if updatedCount > 0 && cfg.PostCmd != "" {
-			logInfo("Running global post_cmd: %s", cfg.PostCmd)
-			out, err := agent.ExecuteCommand(cfg.PostCmd, 30*time.Second)
+		// 3. Run global_post_cmd / post_cmd if at least one cert was updated
+		globalPost := cfg.GetGlobalPostCmd()
+		if updatedCount > 0 && globalPost != "" {
+			logInfo("Running global post_cmd: %s", globalPost)
+			out, err := agent.ExecuteCommand(globalPost, 30*time.Second)
 			if err != nil {
 				logError("Global post_cmd failed after cert update!: %v", err)
 			} else if out != "" {

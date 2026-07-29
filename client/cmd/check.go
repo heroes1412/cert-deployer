@@ -86,7 +86,7 @@ var checkCmd = &cobra.Command{
 					resp.Body.Close()
 
 					if resp.StatusCode == http.StatusNotFound {
-						row.Status = "NOT FOUND"
+						row.Status = "SERVER NOT FOUND"
 					} else if resp.StatusCode == http.StatusOK {
 						var meta ServerMetaResponse
 						if err := json.Unmarshal(body, &meta); err == nil && meta.NotAfter != "" {
@@ -101,7 +101,7 @@ var checkCmd = &cobra.Command{
 								row.ServerSHA256 = meta.SHA256
 
 								if localCertTime == nil {
-									row.Status = "LOCAL MISSING"
+									row.Status = "LOCAL NOT FOUND"
 								} else if t.After(*localCertTime) {
 									row.Status = "UPDATE AVAIL"
 								} else {
@@ -123,18 +123,18 @@ var checkCmd = &cobra.Command{
 		}
 
 		// Print ASCII Table: SERVERCERT NAME | SERVER EXPIRATION | LOCAL EXPIRATION | STATUS
-		fmt.Println("+-----------------+---------------------+---------------------+----------------+")
-		fmt.Println("| SERVERCERT NAME | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS         |")
-		fmt.Println("+-----------------+---------------------+---------------------+----------------+")
+		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
+		fmt.Println("| SERVERCERT NAME | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS           |")
+		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
 		for _, r := range rows {
-			fmt.Printf("| %-15s | %-19s | %-19s | %-14s |\n",
+			fmt.Printf("| %-15s | %-19s | %-19s | %-16s |\n",
 				truncateStr(r.Name, 15),
 				truncateStr(r.ServerExp, 19),
 				truncateStr(r.LocalExp, 19),
-				truncateStr(r.Status, 14),
+				truncateStr(r.Status, 16),
 			)
 		}
-		fmt.Println("+-----------------+---------------------+---------------------+----------------+")
+		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
 
 		return nil
 	},
