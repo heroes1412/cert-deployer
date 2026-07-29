@@ -30,6 +30,22 @@
             reader.readAsText(file);
         }
 
+        function downloadCertFile(defaultName, elementId, ext) {
+            const content = document.getElementById(elementId).value;
+            if (!content || !content.trim()) {
+                alert("Content is empty!");
+                return;
+            }
+            const certName = document.getElementById('certNameInput').value.trim() || defaultName;
+            const filename = certName + ext;
+            const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
         function openAddModal() {
             document.getElementById('modalTitle').innerText = 'Add Certificate';
             document.getElementById('certNameInput').value = '';
@@ -229,10 +245,15 @@
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label class="block text-xs font-semibold text-slate-400">Certificate PEM (cert_data)</label>
-                        <label class="text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
-                            📁 Browse File...
-                            <input type="file" class="hidden" accept=".crt,.cer,.pem,.txt" onchange="handleFileUpload(this, 'cert_data')">
-                        </label>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="downloadCertFile('cert', 'cert_data', '.crt')" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                💾 Download Cert
+                            </button>
+                            <label class="text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                📁 Browse File...
+                                <input type="file" class="hidden" accept=".crt,.cer,.pem,.txt" onchange="handleFileUpload(this, 'cert_data')">
+                            </label>
+                        </div>
                     </div>
                     <textarea id="cert_data" name="cert_data" rows="5" placeholder="-----BEGIN CERTIFICATE-----" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-slate-100"></textarea>
                 </div>
@@ -240,10 +261,15 @@
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label class="block text-xs font-semibold text-slate-400">Private Key PEM (key_data)</label>
-                        <label class="text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
-                            📁 Browse File...
-                            <input type="file" class="hidden" accept=".key,.pem,.txt" onchange="handleFileUpload(this, 'key_data')">
-                        </label>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="downloadCertFile('key', 'key_data', '.key')" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                💾 Download Key
+                            </button>
+                            <label class="text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                📁 Browse File...
+                                <input type="file" class="hidden" accept=".key,.pem,.txt" onchange="handleFileUpload(this, 'key_data')">
+                            </label>
+                        </div>
                     </div>
                     <textarea id="key_data" name="key_data" rows="5" placeholder="-----BEGIN PRIVATE KEY-----" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-slate-100"></textarea>
                 </div>

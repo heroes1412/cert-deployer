@@ -35,6 +35,17 @@ func logError(format string, a ...interface{}) {
 	fmt.Printf("[%s] [ERROR] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, a...))
 }
 
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) || info == nil || info.IsDir() {
+		return false
+	}
+	return true
+}
+
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Synchronize certificates from Cert Vault Server",
@@ -47,22 +58,16 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		// Pre-flight Check: validate target directories
-		if err := cfg.ValidateTargetDirectories(); err != nil {
-			logError("Pre-flight directory check failed: %v", err)
-			return err
-		}
-
-		// 1. Run pre_cmd
+		// 1. Run global pre_cmd
 		if cfg.PreCmd != "" {
-			logInfo("Running pre_cmd: %s", cfg.PreCmd)
+			logInfo("Running global pre_cmd: %s", cfg.PreCmd)
 			out, err := agent.ExecuteCommand(cfg.PreCmd, 30*time.Second)
 			if err != nil {
-				logError("pre_cmd failed: %v. Aborting update!", err)
+				logError("Global pre_cmd failed: %v. Aborting update!", err)
 				os.Exit(1)
 			}
 			if out != "" {
-				logInfo("pre_cmd output: %s", out)
+				logInfo("Global pre_cmd output: %s", out)
 			}
 		}
 
@@ -72,6 +77,29 @@ var syncCmd = &cobra.Command{
 
 		for _, cert := range cfg.Certs {
 			logInfo("Processing cert mapping: %s", cert.ServercertName)
+
+			// Issue 6 & 7: Check local file existence before attempting sync
+			if !fileExists(cert.CertFile) {
+				logWarn("Local certfile does not exist (%s) for %s. Skipping cert update.", cert.CertFile, cert.ServercertName)
+				continue
+			}
+			if cert.KeyFile != "" && cert.KeyFile != cert.CertFile && !fileExists(cert.KeyFile) {
+				logWarn("Local keyfile does not exist (%s) for %s. Skipping cert update.", cert.KeyFile, cert.ServercertName)
+				continue
+			}
+
+			// Issue 5: Per-cert pre_cmd
+			if cert.PreCmd != "" {
+				logInfo("Running per-cert pre_cmd for %s: %s", cert.ServercertName, cert.PreCmd)
+				out, err := agent.ExecuteCommand(cert.PreCmd, 30*time.Second)
+				if err != nil {
+					logError("Per-cert pre_cmd failed for %s: %v. Skipping cert update.", cert.ServercertName, err)
+					continue
+				}
+				if out != "" {
+					logInfo("Per-cert pre_cmd output for %s: %s", cert.ServercertName, out)
+				}
+			}
 
 			reqURL := fmt.Sprintf("%s/api/v1/certs/%s", cfg.ServerURL, cert.ServercertName)
 			req, err := http.NewRequest("GET", reqURL, nil)
@@ -85,7 +113,11 @@ var syncCmd = &cobra.Command{
 			if err != nil || resp.StatusCode != http.StatusOK {
 				status := "CONN_ERR"
 				if resp != nil {
-					status = fmt.Sprintf("HTTP %d", resp.StatusCode)
+					if resp.StatusCode == http.StatusNotFound {
+						status = "HTTP 404 (Not Found)"
+					} else {
+						status = fmt.Sprintf("HTTP %d", resp.StatusCode)
+					}
 				}
 				logError("Failed to fetch cert %s from server: %s", cert.ServercertName, status)
 				continue
@@ -115,18 +147,29 @@ var syncCmd = &cobra.Command{
 
 			logInfo("Successfully updated certificate files for %s", cert.ServercertName)
 			updatedCount++
+
+			// Issue 5: Per-cert post_cmd
+			if cert.PostCmd != "" {
+				logInfo("Running per-cert post_cmd for %s: %s", cert.ServercertName, cert.PostCmd)
+				out, err := agent.ExecuteCommand(cert.PostCmd, 30*time.Second)
+				if err != nil {
+					logError("Per-cert post_cmd failed for %s: %v", cert.ServercertName, err)
+				} else if out != "" {
+					logInfo("Per-cert post_cmd output for %s: %s", cert.ServercertName, out)
+				}
+			}
 		}
 
 		logInfo("Synchronization complete. Total certificates updated: %d", updatedCount)
 
-		// 3. Run post_cmd if at least one cert was updated
+		// 3. Run global post_cmd if at least one cert was updated
 		if updatedCount > 0 && cfg.PostCmd != "" {
-			logInfo("Running post_cmd: %s", cfg.PostCmd)
+			logInfo("Running global post_cmd: %s", cfg.PostCmd)
 			out, err := agent.ExecuteCommand(cfg.PostCmd, 30*time.Second)
 			if err != nil {
-				logError("post_cmd failed after cert update!: %v", err)
-			} else {
-				logInfo("post_cmd executed successfully. Output: %s", out)
+				logError("Global post_cmd failed after cert update!: %v", err)
+			} else if out != "" {
+				logInfo("Global post_cmd output: %s", out)
 			}
 		}
 

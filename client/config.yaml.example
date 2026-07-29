@@ -6,22 +6,22 @@ server_url: "http://localhost:8080"
 # Bearer Token generated from Server Admin UI
 auth_token: "your-generated-bearer-token-here"
 
-# Optional shell command executed BEFORE certificate download/update.
-# If pre_cmd fails (exit code != 0), the agent aborts immediately.
+# Optional global pre_cmd executed BEFORE any certificate sync
 pre_cmd: "nginx -t"
 
 # List of certificates to sync
 certs:
-  # Nginx example: separate certfile and keyfile
+  # Nginx example: separate certfile and keyfile with per-cert pre_cmd / post_cmd
   - servercert_name: "prod_web_cert"
-    certfile: "/etc/nginx/ssl/prod_web.crt"
-    keyfile: "/etc/nginx/ssl/prod_web.key"
+    certfile: "D:\\vnshell\\it\\Linux\\prod_web.crt"
+    keyfile: "D:\\vnshell\\it\\Linux\\prod_web.key"
+    pre_cmd: "nginx -t"
+    post_cmd: "systemctl reload nginx"
   
-  # HAProxy example: combined certfile and keyfile (certfile == keyfile)
+  # HAProxy example: combined certfile and keyfile
   - servercert_name: "lb_haproxy_cert"
     certfile: "/etc/haproxy/certs/haproxy.pem"
     keyfile: "/etc/haproxy/certs/haproxy.pem"
 
-# Optional shell command executed AFTER successful certificate update.
-# Executed only if at least one certificate was updated.
+# Optional global post_cmd executed AFTER successful certificate sync session
 post_cmd: "systemctl reload nginx"

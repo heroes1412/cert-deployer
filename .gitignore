@@ -6,6 +6,9 @@ server/cert-server.exe~
 client/cert-agent
 client/cert-agent.exe
 
+# Requirement & Scratch Fix Files
+Fix*
+
 # Database & Storage
 *.db
 *.db-journal

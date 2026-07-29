@@ -13,6 +13,16 @@ var rootCmd = &cobra.Command{
 	Use:   "cert-agent",
 	Short: "Certificate Auto Rotation Agent",
 	Long:  `A lightweight CLI Agent for synchronizing SSL/TLS certificates from Cert Vault Server.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// If user did not pass -c / --config explicitly
+		if !cmd.Flags().Changed("config") {
+			if _, err := os.Stat("config.yaml"); err == nil {
+				ConfigFile = "config.yaml"
+			} else {
+				ConfigFile = "/etc/cert-agent/config.yaml"
+			}
+		}
+	},
 }
 
 func Execute() {
@@ -23,5 +33,5 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&ConfigFile, "config", "c", "/etc/cert-agent/config.yaml", "path to config.yaml")
+	rootCmd.PersistentFlags().StringVarP(&ConfigFile, "config", "c", "config.yaml", "path to config.yaml")
 }

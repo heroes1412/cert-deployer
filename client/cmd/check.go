@@ -34,8 +34,8 @@ var checkCmd = &cobra.Command{
 
 		type TableRow struct {
 			Name         string
-			LocalExp     string
 			ServerExp    string
+			LocalExp     string
 			Status       string
 			ServerSHA256 string
 			LocalSHA256  string
@@ -48,8 +48,8 @@ var checkCmd = &cobra.Command{
 		for _, cert := range cfg.Certs {
 			row := TableRow{
 				Name:      cert.ServercertName,
-				LocalExp:  "N/A",
 				ServerExp: "N/A",
+				LocalExp:  "N/A",
 				Status:    "UNKNOWN",
 			}
 
@@ -65,7 +65,11 @@ var checkCmd = &cobra.Command{
 							t := parsedCert.NotAfter
 							localCertTime = &t
 							days := int(math.Ceil(t.Sub(now).Hours() / 24))
-							row.LocalExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
+							if days < 0 {
+								row.LocalExp = fmt.Sprintf("%s (EXPIRED)", t.Format("2006-01-02"))
+							} else {
+								row.LocalExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
+							}
 						}
 					}
 				}
@@ -77,29 +81,39 @@ var checkCmd = &cobra.Command{
 			if err == nil {
 				req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
 				resp, err := client.Do(req)
-				if err == nil && resp.StatusCode == http.StatusOK {
+				if err == nil {
 					body, _ := io.ReadAll(resp.Body)
 					resp.Body.Close()
 
-					var meta ServerMetaResponse
-					if err := json.Unmarshal(body, &meta); err == nil && meta.NotAfter != "" {
-						t, err := time.Parse("2006-01-02T15:04:05Z", meta.NotAfter)
-						if err == nil {
-							days := int(math.Ceil(t.Sub(now).Hours() / 24))
-							row.ServerExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
-							row.ServerSHA256 = meta.SHA256
+					if resp.StatusCode == http.StatusNotFound {
+						row.Status = "NOT FOUND"
+					} else if resp.StatusCode == http.StatusOK {
+						var meta ServerMetaResponse
+						if err := json.Unmarshal(body, &meta); err == nil && meta.NotAfter != "" {
+							t, err := time.Parse("2006-01-02T15:04:05Z", meta.NotAfter)
+							if err == nil {
+								days := int(math.Ceil(t.Sub(now).Hours() / 24))
+								if days < 0 {
+									row.ServerExp = fmt.Sprintf("%s (EXPIRED)", t.Format("2006-01-02"))
+								} else {
+									row.ServerExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
+								}
+								row.ServerSHA256 = meta.SHA256
 
-							if localCertTime == nil {
-								row.Status = "MISSING LOCAL"
-							} else if t.After(*localCertTime) {
-								row.Status = "UPDATE AVAIL"
-							} else {
-								row.Status = "UP TO DATE"
+								if localCertTime == nil {
+									row.Status = "LOCAL MISSING"
+								} else if t.After(*localCertTime) {
+									row.Status = "UPDATE AVAIL"
+								} else {
+									row.Status = "UP TO DATE"
+								}
 							}
 						}
+					} else {
+						row.Status = "SERVER ERR"
 					}
 				} else {
-					row.Status = "SERVER ERR"
+					row.Status = "CONN ERR"
 				}
 			} else {
 				row.Status = "CONN ERR"
@@ -108,15 +122,15 @@ var checkCmd = &cobra.Command{
 			rows = append(rows, row)
 		}
 
-		// Print ASCII Table
+		// Print ASCII Table: SERVERCERT NAME | SERVER EXPIRATION | LOCAL EXPIRATION | STATUS
 		fmt.Println("+-----------------+---------------------+---------------------+----------------+")
-		fmt.Println("| SERVERCERT NAME | LOCAL EXPIRATION    | SERVER EXPIRATION   | STATUS         |")
+		fmt.Println("| SERVERCERT NAME | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS         |")
 		fmt.Println("+-----------------+---------------------+---------------------+----------------+")
 		for _, r := range rows {
 			fmt.Printf("| %-15s | %-19s | %-19s | %-14s |\n",
 				truncateStr(r.Name, 15),
-				truncateStr(r.LocalExp, 19),
 				truncateStr(r.ServerExp, 19),
+				truncateStr(r.LocalExp, 19),
 				truncateStr(r.Status, 14),
 			)
 		}
