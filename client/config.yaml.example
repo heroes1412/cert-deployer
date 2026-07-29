@@ -6,8 +6,8 @@ server_url: "http://localhost:8080"
 # Bearer Token generated from Server Admin UI
 auth_token: "your-generated-bearer-token-here"
 
-# Optional global_pre_cmd executed ONCE before any certificate sync starts
-global_pre_cmd: "echo 'Starting cert sync session...'"
+# Global command executed ONCE before any certificate sync session starts
+global_pre_cmd: "echo 'Starting global pre-check session...'"
 
 # List of certificates to sync
 certs:
@@ -25,5 +25,5 @@ certs:
     pre_cmd: "haproxy -c -f /etc/haproxy/haproxy.cfg"
     post_cmd: "systemctl reload haproxy"
 
-# Optional global_post_cmd executed ONCE after all certificate syncs finish
-global_post_cmd: "echo 'Cert sync session completed successfully!'"
+# Global command executed ONCE after all certificate syncs finish (if at least 1 cert updated)
+global_post_cmd: "echo 'Global sync session completed successfully!'"

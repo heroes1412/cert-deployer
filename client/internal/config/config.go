@@ -22,60 +22,48 @@ type Config struct {
 	ServerURL     string        `yaml:"server_url"`
 	AuthToken     string        `yaml:"auth_token"`
 	GlobalPreCmd  string        `yaml:"global_pre_cmd"`
-	PreCmd        string        `yaml:"pre_cmd"`
 	Certs         []CertMapping `yaml:"certs"`
 	GlobalPostCmd string        `yaml:"global_post_cmd"`
-	PostCmd       string        `yaml:"post_cmd"`
 }
 
-func (c *Config) GetGlobalPreCmd() string {
-	if strings.TrimSpace(c.GlobalPreCmd) != "" {
-		return c.GlobalPreCmd
-	}
-	return c.PreCmd
-}
-
-func (c *Config) GetGlobalPostCmd() string {
-	if strings.TrimSpace(c.GlobalPostCmd) != "" {
-		return c.GlobalPostCmd
-	}
-	return c.PostCmd
-}
-
-// preprocessYAML cleans invalid Windows backslash escapes (e.g. \v, \i, \L, \S, \e, \p)
-// by replacing single backslashes in path strings with forward slashes before parsing.
+// preprocessYAML escapes single backslashes in double-quoted strings (e.g. "C:\path", "copy nul c:\file")
+// into double backslashes "\\", ensuring YAML parsing succeeds without corrupting backslashes into '/'
+// or breaking shell commands (like cmd.exe copy) or turning \t/\n into control characters.
 func preprocessYAML(data []byte) []byte {
 	var buf bytes.Buffer
-	inQuote := false
-	quoteChar := byte(0)
+	inDoubleQuotes := false
 
 	for i := 0; i < len(data); i++ {
 		ch := data[i]
 
-		if (ch == '"' || ch == '\'') && (i == 0 || data[i-1] != '\\') {
-			if !inQuote {
-				inQuote = true
-				quoteChar = ch
-			} else if ch == quoteChar {
-				inQuote = false
+		// Track double quote boundaries
+		if ch == '"' {
+			bsCount := 0
+			for j := i - 1; j >= 0 && data[j] == '\\'; j-- {
+				bsCount++
+			}
+			if bsCount%2 == 0 {
+				inDoubleQuotes = !inDoubleQuotes
 			}
 			buf.WriteByte(ch)
 			continue
 		}
 
-		if ch == '\\' {
-			if i+1 < len(data) {
-				next := data[i+1]
-				// Keep valid standard YAML escapes: \n, \t, \r, \", \\
-				if next == 'n' || next == 't' || next == 'r' || next == '"' || next == '\\' {
-					buf.WriteByte('\\')
-					buf.WriteByte(next)
-					i++
-					continue
-				}
+		if inDoubleQuotes && ch == '\\' {
+			// If already double backslash \\, keep \\
+			if i+1 < len(data) && data[i+1] == '\\' {
+				buf.WriteString("\\\\")
+				i++ // skip second backslash
+				continue
 			}
-			// Convert invalid backslash escape to forward slash
-			buf.WriteByte('/')
+			// If escaped double quote \", keep \"
+			if i+1 < len(data) && data[i+1] == '"' {
+				buf.WriteString("\\\"")
+				i++ // skip quote
+				continue
+			}
+			// Escape single backslash inside double quotes to \\ so YAML unmarshals literal \
+			buf.WriteString("\\\\")
 			continue
 		}
 
@@ -101,8 +89,8 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 
 	for i := range cfg.Certs {
-		cfg.Certs[i].CertFile = filepath.ToSlash(cfg.Certs[i].CertFile)
-		cfg.Certs[i].KeyFile = filepath.ToSlash(cfg.Certs[i].KeyFile)
+		cfg.Certs[i].CertFile = filepath.Clean(cfg.Certs[i].CertFile)
+		cfg.Certs[i].KeyFile = filepath.Clean(cfg.Certs[i].KeyFile)
 	}
 
 	return &cfg, nil

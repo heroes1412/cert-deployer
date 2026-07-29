@@ -58,17 +58,16 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		// 1. Run global_pre_cmd / pre_cmd
-		globalPre := cfg.GetGlobalPreCmd()
-		if globalPre != "" {
-			logInfo("Running global pre_cmd: %s", globalPre)
-			out, err := agent.ExecuteCommand(globalPre, 30*time.Second)
+		// 1. Run global_pre_cmd
+		if cfg.GlobalPreCmd != "" {
+			logInfo("Running global_pre_cmd: %s", cfg.GlobalPreCmd)
+			out, err := agent.ExecuteCommand(cfg.GlobalPreCmd, 30*time.Second)
 			if err != nil {
-				logError("Global pre_cmd failed: %v. Aborting update!", err)
+				logError("global_pre_cmd failed: %v. Aborting update!", err)
 				os.Exit(1)
 			}
 			if out != "" {
-				logInfo("Global pre_cmd output: %s", out)
+				logInfo("global_pre_cmd output: %s", out)
 			}
 		}
 
@@ -163,15 +162,14 @@ var syncCmd = &cobra.Command{
 
 		logInfo("Synchronization complete. Total certificates updated: %d", updatedCount)
 
-		// 3. Run global_post_cmd / post_cmd if at least one cert was updated
-		globalPost := cfg.GetGlobalPostCmd()
-		if updatedCount > 0 && globalPost != "" {
-			logInfo("Running global post_cmd: %s", globalPost)
-			out, err := agent.ExecuteCommand(globalPost, 30*time.Second)
+		// 3. Run global_post_cmd if at least one cert was updated
+		if updatedCount > 0 && cfg.GlobalPostCmd != "" {
+			logInfo("Running global_post_cmd: %s", cfg.GlobalPostCmd)
+			out, err := agent.ExecuteCommand(cfg.GlobalPostCmd, 30*time.Second)
 			if err != nil {
-				logError("Global post_cmd failed after cert update!: %v", err)
+				logError("global_post_cmd failed after cert update!: %v", err)
 			} else if out != "" {
-				logInfo("Global post_cmd output: %s", out)
+				logInfo("global_post_cmd output: %s", out)
 			}
 		}
 
