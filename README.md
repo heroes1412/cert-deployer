@@ -18,10 +18,12 @@ The repository is structured into two independent components:
 - Automatic X.509 certificate parsing and public/private key cryptographic consistency check prior to saving.
 - Download Cert (`.crt`) and Download Key (`.key`) buttons directly from the Web UI modal.
 - API Bearer Token generation and revocation with 1-click Copy Token button.
-- Change Admin Password interface.
+- Token Masking (displays `a1b2c...8y9z0`) & Audit Logging (`last_used_at` & `last_used_ip`).
+- Change Admin Password & Configurable HTTP Management Port via Web UI Settings Modal.
 - REST API protected by Bearer Token Authorization.
+- Native Windows Service support (via Windows SCM) with automatic error logging to `cert-server.log`.
 
-### Build & Run
+### Build & Run (Bare Metal / VM)
 ```bash
 cd server
 go build -o cert-server main.go
@@ -30,12 +32,43 @@ go build -o cert-server main.go
 By default, the server runs on `http://localhost:8080` (Default credentials: Username `admin`, Password `admin123`).
 
 Environment variables:
-- `PORT`: HTTP listener port (default `8080`).
-- `DB_PATH`: SQLite database file path (default `cert-vault.db`).
+- `PORT`: HTTP listener port (default `8080` or configured via Web UI Settings).
+- `DB_PATH`: SQLite database file path (default `data/cert-vault.db` or `cert-vault.db`).
 
 ---
 
-## 2. Client Agent Component (`/client`)
+## 2. Docker & Kubernetes Deployment (Server)
+
+### A. Docker Compose Deployment (1-Command Run)
+Run the server using Docker Compose with volume persistence at `/app/data`:
+```bash
+docker-compose up -d --build
+```
+This builds the multi-stage `server/Dockerfile` (~15MB image) and mounts persistent database storage to named volume `cert-vault-data`.
+
+### B. Kubernetes Deployment (K8s)
+All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Administrator/Desktop/cert-rotate-tool/deploy/k8s):
+
+1. **Apply PVC (PersistentVolumeClaim)**:
+   ```bash
+   kubectl apply -f deploy/k8s/pvc.yaml
+   ```
+2. **Apply Deployment**:
+   ```bash
+   kubectl apply -f deploy/k8s/deployment.yaml
+   ```
+3. **Apply ClusterIP Service**:
+   ```bash
+   kubectl apply -f deploy/k8s/service.yaml
+   ```
+4. **Apply Ingress**:
+   ```bash
+   kubectl apply -f deploy/k8s/ingress.yaml
+   ```
+
+---
+
+## 3. Client Agent Component (`/client`)
 
 ### Features
 - CLI Commands: `cert-agent check` and `cert-agent sync`.
@@ -44,7 +77,8 @@ Environment variables:
 - Global commands (`global_pre_cmd`, `global_post_cmd`) and per-certificate commands (`pre_cmd`, `post_cmd`).
 - Robust Windows path preprocessing: handles backslashes `\` (`"D:\tmp\1 1\expired.pem"`) without YAML escape errors.
 - Atomic file writes using temporary files and atomic `os.Rename`.
-- Strict file permission `0600` for private key files.
+- Preserves existing file permissions (Mode) and ownership (UID/GID on Linux/Unix).
+- Strict file permission `0600` fallback for new private key files (`0644` for public certs).
 - Checks local file existence: skips syncing if local `certfile` or `keyfile` does not exist.
 - Special handling for combined cert files (e.g. HAProxy where `certfile == keyfile`).
 
@@ -60,34 +94,17 @@ Using automated build scripts (compiled for both Windows & Linux):
 ./build.sh
 ```
 
-Or build manually inside `client/`:
-```bash
-cd client
-go build -o cert-agent main.go
-```
-
 ---
 
-## 3. Native System Services Setup (Windows sc.exe & Linux Systemd)
+## 4. Native System Services Setup (Windows sc.exe & Linux Systemd)
 
 ### A. Windows Service Setup (Native `sc.exe`)
-No third-party tools (like NSSM) required. Uses Windows native `sc.exe`:
+No third-party tools required. Uses Windows native `sc.exe`:
 
 1. Build binaries using `build.bat`.
 2. Run `scripts/service_install_windows.bat` as Administrator:
    ```cmd
    scripts\service_install_windows.bat
-   ```
-   Or register manually via Windows Command Prompt (Admin):
-   ```cmd
-   sc create CertVaultServer binPath= "C:\path\to\build\windows\cert-server.exe" start= auto displayname= "Cert Vault Server Service"
-   sc start CertVaultServer
-   ```
-   Useful Service commands:
-   ```cmd
-   sc query CertVaultServer
-   sc stop CertVaultServer
-   sc delete CertVaultServer
    ```
 
 ### B. Linux Service Setup (Native Systemd)
@@ -95,56 +112,23 @@ Run automated Linux service installer script as root:
 ```bash
 sudo ./scripts/service_install_linux.sh
 ```
-This automatically installs:
-- **Server Service**: `/etc/systemd/system/cert-server.service` (manages `http://localhost:8080`).
-- **Client Timer**: `/etc/systemd/system/cert-agent.timer` (runs `cert-agent sync` every 6 hours).
-
-Useful Linux `systemctl` commands:
-```bash
-# Server status / start / stop
-systemctl status cert-server
-systemctl start cert-server
-systemctl stop cert-server
-
-# Client timer status
-systemctl status cert-agent.timer
-```
 
 ---
 
-## 4. Configuration Guide (`config.yaml`)
+## 5. Configuration Guide (`config.yaml`)
 
 ```yaml
 server_url: "http://localhost:8080"
 auth_token: "secret-bearer-token-here"
 
-# Global command executed ONCE before any certificate sync session starts
 global_pre_cmd: "echo 'Starting cert sync session...'"
 
 certs:
-  # Nginx example: separate certfile and keyfile with per-cert pre_cmd / post_cmd
   - servercert_name: "prod_web_cert"
     certfile: "D:\\vnshell\\it\\Linux\\prod_web.crt"
     keyfile: "D:\\vnshell\\it\\Linux\\prod_web.key"
     pre_cmd: "nginx -t"
     post_cmd: "systemctl reload nginx"
-  
-  # HAProxy example: combined certfile and keyfile
-  - servercert_name: "lb_haproxy_cert"
-    certfile: "/etc/haproxy/certs/haproxy.pem"
-    keyfile: "/etc/haproxy/certs/haproxy.pem"
-    pre_cmd: "haproxy -c -f /etc/haproxy/haproxy.cfg"
-    post_cmd: "systemctl reload haproxy"
 
-# Global command executed ONCE after all certificate syncs finish (if at least 1 cert updated)
 global_post_cmd: "echo 'Cert sync session completed successfully!'"
-```
-
----
-
-## 5. Crontab Setup Example
-
-To automate certificate rotation every 6 hours on Linux via Cron:
-```cron
-0 */6 * * * /usr/local/bin/cert-agent sync -c /etc/cert-agent/config.yaml >> /var/log/cert-agent.log 2>&1
 ```

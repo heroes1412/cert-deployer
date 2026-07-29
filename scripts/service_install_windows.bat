@@ -24,7 +24,7 @@ if not exist "%SERVER_BIN%" (
 
 echo [1/2] Registering CertVaultServer Windows Service natively via sc.exe...
 sc query CertVaultServer >nul 2>&1
-if %errorlevel% eq 0 (
+if %errorlevel% equ 0 (
     echo [INFO] Service CertVaultServer already exists. Stopping and re-creating...
     sc stop CertVaultServer >nul 2>&1
     sc delete CertVaultServer >nul 2>&1

@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cert-server/internal/crypto"
@@ -38,9 +39,17 @@ type CertViewModel struct {
 type TokenViewModel struct {
 	ID                 uint
 	Token              string
+	TokenMasked        string
 	Description        string
-	HashShort          string
 	CreatedAtFormatted string
+}
+
+func maskToken(token string) string {
+	token = strings.TrimSpace(token)
+	if len(token) <= 10 {
+		return token
+	}
+	return token[:5] + "..." + token[len(token)-5:]
 }
 
 func ShowLogin(c *gin.Context) {
@@ -118,24 +127,23 @@ func ShowDashboard(c *gin.Context) {
 
 	var tokenVMs []TokenViewModel
 	for _, t := range tokens {
-		hashShort := t.TokenHash
-		if len(hashShort) > 16 {
-			hashShort = hashShort[:16] + "..."
-		}
 		tokenVMs = append(tokenVMs, TokenViewModel{
 			ID:                 t.ID,
 			Token:              t.Token,
+			TokenMasked:        maskToken(t.Token),
 			Description:        t.Description,
-			HashShort:          hashShort,
 			CreatedAtFormatted: t.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
+	serverPort := db.GetSetting("server_port", "8080")
+
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"certs":  certVMs,
-		"tokens": tokenVMs,
-		"msg":    msg,
-		"error":  errMsg,
+		"certs":      certVMs,
+		"tokens":     tokenVMs,
+		"serverPort": serverPort,
+		"msg":        msg,
+		"error":      errMsg,
 	})
 }
 
@@ -181,6 +189,13 @@ func DeleteCertificate(c *gin.Context) {
 }
 
 func GenerateAPIToken(c *gin.Context) {
+	var count int64
+	db.DB.Model(&models.APIToken{}).Count(&count)
+	if count >= 1 {
+		c.Redirect(http.StatusSeeOther, "/admin?error=An+API+token+already+exists.+Please+revoke+the+existing+token+first.")
+		return
+	}
+
 	desc := c.PostForm("description")
 
 	tokenBytes := make([]byte, 32)
@@ -210,26 +225,46 @@ func RevokeAPIToken(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+revoked")
 }
 
-func ChangePassword(c *gin.Context) {
+func SaveSettings(c *gin.Context) {
+	newPort := c.PostForm("server_port")
 	currentPass := c.PostForm("current_password")
 	newPass := c.PostForm("new_password")
 	confirmPass := c.PostForm("confirm_password")
 
-	dbPass := db.GetSetting("admin_password", DefaultAdminPass)
-	if currentPass != dbPass {
-		c.Redirect(http.StatusSeeOther, "/admin?error=Current+password+is+incorrect")
-		return
+	msg := "Settings+saved+successfully!"
+
+	// 1. Handle Server Port Update
+	if newPort != "" {
+		portNum, err := strconv.Atoi(newPort)
+		if err != nil || portNum < 1 || portNum > 65535 {
+			c.Redirect(http.StatusSeeOther, "/admin?error=Invalid+server+port+number")
+			return
+		}
+		oldPort := db.GetSetting("server_port", "8080")
+		if oldPort != newPort {
+			_ = db.SetSetting("server_port", newPort)
+			msg = "Settings+saved!+Server+port+updated+to+" + newPort + "+(restart+required)"
+		}
 	}
 
-	if newPass == "" || newPass != confirmPass {
-		c.Redirect(http.StatusSeeOther, "/admin?error=New+passwords+do+not+match+or+are+empty")
-		return
+	// 2. Handle Password Change if requested
+	if currentPass != "" || newPass != "" {
+		dbPass := db.GetSetting("admin_password", DefaultAdminPass)
+		if currentPass != dbPass {
+			c.Redirect(http.StatusSeeOther, "/admin?error=Current+password+is+incorrect")
+			return
+		}
+
+		if newPass == "" || newPass != confirmPass {
+			c.Redirect(http.StatusSeeOther, "/admin?error=New+passwords+do+not+match+or+are+empty")
+			return
+		}
+
+		if err := db.SetSetting("admin_password", newPass); err != nil {
+			c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+update+password")
+			return
+		}
 	}
 
-	if err := db.SetSetting("admin_password", newPass); err != nil {
-		c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+update+password")
-		return
-	}
-
-	c.Redirect(http.StatusSeeOther, "/admin?msg=Admin+password+changed+successfully")
+	c.Redirect(http.StatusSeeOther, "/admin?msg="+msg)
 }

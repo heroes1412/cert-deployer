@@ -2,9 +2,11 @@ package main
 
 import (
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"cert-server/internal/db"
 	"cert-server/internal/handlers"
@@ -14,10 +16,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
+func initEnvironment() {
+	// Set working directory to executable directory to avoid running inside C:\Windows\System32
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		_ = os.Chdir(execDir)
+	}
+
+	// Setup log file cert-server.log in the application directory
+	logFile, err := os.OpenFile("cert-server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(multiWriter)
+		gin.DefaultWriter = multiWriter
+		gin.DefaultErrorWriter = multiWriter
+	}
+}
+
+func runServer() {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "cert-vault.db"
+		if _, err := os.Stat("cert-vault.db"); err == nil {
+			dbPath = "cert-vault.db"
+		} else {
+			_ = os.MkdirAll("data", 0755)
+			dbPath = filepath.Join("data", "cert-vault.db")
+		}
 	}
 
 	_, err := db.InitDB(dbPath)
@@ -45,7 +70,7 @@ func main() {
 		admin.POST("/certs/delete", handlers.DeleteCertificate)
 		admin.POST("/tokens/generate", handlers.GenerateAPIToken)
 		admin.POST("/tokens/revoke", handlers.RevokeAPIToken)
-		admin.POST("/password/change", handlers.ChangePassword)
+		admin.POST("/settings/save", handlers.SaveSettings)
 	}
 
 	// Redirect root to /admin
@@ -63,11 +88,22 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = db.GetSetting("server_port", "8080")
 	}
 
 	log.Printf("[INFO] Server starting on http://localhost:%s", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Server failed to run: %v", err)
 	}
+}
+
+func main() {
+	initEnvironment()
+
+	if runWindowsServiceIfService() {
+		return
+	}
+
+	// Interactive Console Mode
+	runServer()
 }

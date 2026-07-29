@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  cert-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: cert-vault-server
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/cert-vault.db
+    volumes:
+      - cert-vault-data:/app/data
+
+volumes:
+  cert-vault-data:

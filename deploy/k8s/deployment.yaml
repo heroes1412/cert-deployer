@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-vault-server
+  namespace: default
+  labels:
+    app: cert-vault-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cert-vault-server
+  template:
+    metadata:
+      labels:
+        app: cert-vault-server
+    spec:
+      containers:
+        - name: cert-server
+          image: cert-vault-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DB_PATH
+              value: "/app/data/cert-vault.db"
+          volumeMounts:
+            - name: cert-data-storage
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: cert-data-storage
+          persistentVolumeClaim:
+            claimName: cert-vault-pvc

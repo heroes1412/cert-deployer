@@ -3,10 +3,10 @@ set PATH=C:\Program Files\Go\bin;%PATH%
 echo Building Server binaries (Windows ^& Linux)...
 set GOOS=windows
 set GOARCH=amd64
-go build -o cert-server.exe main.go
+go build -o cert-server.exe .
 
 set GOOS=linux
 set GOARCH=amd64
-go build -o cert-server main.go
+go build -o cert-server .
 
 echo Server build complete: cert-server.exe (Windows), cert-server (Linux)

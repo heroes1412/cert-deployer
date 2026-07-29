@@ -33,13 +33,26 @@ func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
 		return nil, errors.New("certificate and private key do not match: " + err.Error())
 	}
 
-	// 2. Parse X.509 certificate to extract NotAfter
-	block, _ := pem.Decode([]byte(certPEM))
-	if block == nil || block.Type != "CERTIFICATE" {
+	// 2. Parse X.509 certificate (iterates through fullchain to locate leaf CERTIFICATE)
+	var certBlock *pem.Block
+	rest := []byte(certPEM)
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type == "CERTIFICATE" {
+			certBlock = block
+			break
+		}
+	}
+
+	if certBlock == nil {
 		return nil, errors.New("failed to decode PEM block containing certificate")
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
 	if err != nil {
 		return nil, errors.New("failed to parse X.509 certificate: " + err.Error())
 	}

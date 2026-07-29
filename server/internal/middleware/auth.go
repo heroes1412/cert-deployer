@@ -34,6 +34,12 @@ func BearerAuthMiddleware() gin.HandlerFunc {
 		}
 
 		token := strings.TrimSpace(parts[1])
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Bearer token cannot be empty"})
+			c.Abort()
+			return
+		}
+
 		tokenHash := HashToken(token)
 
 		var apiToken models.APIToken

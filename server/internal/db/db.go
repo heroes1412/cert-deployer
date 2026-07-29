@@ -2,6 +2,7 @@ package db
 
 import (
 	"log"
+	"strings"
 
 	"cert-server/internal/models"
 
@@ -12,9 +13,21 @@ import (
 var DB *gorm.DB
 
 func InitDB(dbPath string) (*gorm.DB, error) {
-	database, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	// Enable WAL mode and 5000ms busy timeout for SQLite stability under concurrent load
+	connStr := dbPath
+	if !strings.Contains(dbPath, "?") {
+		connStr += "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	}
+
+	database, err := gorm.Open(sqlite.Open(connStr), &gorm.Config{})
 	if err != nil {
 		return nil, err
+	}
+
+	sqlDB, err := database.DB()
+	if err == nil {
+		sqlDB.SetMaxOpenConns(25)
+		sqlDB.SetMaxIdleConns(5)
 	}
 
 	err = database.AutoMigrate(&models.Certificate{}, &models.APIToken{}, &models.Setting{})

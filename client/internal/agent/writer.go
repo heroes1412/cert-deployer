@@ -24,19 +24,19 @@ func ComputeStringSHA256(content string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func WriteAtomicFile(targetPath string, content string, mode os.FileMode) error {
+func WriteAtomicFile(targetPath string, content string, defaultMode os.FileMode) error {
 	dir := filepath.Dir(targetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
 	tmpFile := targetPath + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(content), mode); err != nil {
+	if err := os.WriteFile(tmpFile, []byte(content), defaultMode); err != nil {
 		return fmt.Errorf("failed to write temporary file %s: %w", tmpFile, err)
 	}
 
-	// Chmod explicitly in case WriteFile mask altered permissions
-	_ = os.Chmod(tmpFile, mode)
+	// Preserve existing file permissions (mode) and owner (UID/GID on Unix) if file exists
+	_ = applyTargetFileMetadata(tmpFile, targetPath, defaultMode)
 
 	if err := os.Rename(tmpFile, targetPath); err != nil {
 		_ = os.Remove(tmpFile)
