@@ -59,8 +59,9 @@ jobs:
         id: release_tag
         run: |
           DATE_STR=$(date +'%d%m%Y')
-          TAG_NAME="v${DATE_STR}-b${{ github.run_number }}"
+          TAG_NAME="${DATE_STR}"
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+          echo "DOCKER_TAG=${DATE_STR}" >> $GITHUB_ENV
 
       - name: Create GitHub Release & Upload Assets
         uses: softprops/action-gh-release@v2
@@ -69,8 +70,20 @@ jobs:
           name: "Release ${{ env.TAG_NAME }}"
           body: |
             Automated production binary release for **cert-deployer**.
-            
-            Includes Server & Client Agent binaries compiled for Windows (amd64) and Linux (amd64, arm64), packaged together with `config.yaml.example`.
+
+            ### 📦 Binaries Included
+            Includes Server & Client Agent binaries compiled for Windows (amd64) and Linux (amd64, arm64), pre-packaged with sample `config.yaml.example`:
+            - `cert-deployer-server-windows-amd64.zip`
+            - `cert-deployer-agent-windows-amd64.zip`
+            - `cert-deployer-server-linux-amd64.tar.gz`
+            - `cert-deployer-agent-linux-amd64.tar.gz`
+            - `cert-deployer-server-linux-arm64.tar.gz`
+            - `cert-deployer-agent-linux-arm64.tar.gz`
+
+            ### 🐳 Corresponding Docker Hub Image
+            - **Docker Image**: `h2372/cert-deployer:${{ env.DOCKER_TAG }}`
+            - **Latest Image**: `h2372/cert-deployer:latest`
+            - **Supported Architectures**: `linux/amd64`, `linux/arm64`
           files: release_assets/*
           draft: false
           prerelease: false
