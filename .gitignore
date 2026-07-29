@@ -1,0 +1,20 @@
+# Binaries
+server/cert-server
+server/cert-server.exe
+client/cert-agent
+client/cert-agent.exe
+
+# Database & Storage
+*.db
+*.db-journal
+*.pem
+*.crt
+*.key
+
+# IDE & System
+.idea/
+.vscode/
+.system_generated/
+
+# Plan & Docs temp
+docs/superpowers/

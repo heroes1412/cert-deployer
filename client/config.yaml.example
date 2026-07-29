@@ -1,0 +1,27 @@
+# Certificate Management System Agent Configuration
+
+# URL of the Cert Vault Server
+server_url: "http://localhost:8080"
+
+# Bearer Token generated from Server Admin UI
+auth_token: "your-generated-bearer-token-here"
+
+# Optional shell command executed BEFORE certificate download/update.
+# If pre_cmd fails (exit code != 0), the agent aborts immediately.
+pre_cmd: "nginx -t"
+
+# List of certificates to sync
+certs:
+  # Nginx example: separate certfile and keyfile
+  - servercert_name: "prod_web_cert"
+    certfile: "/etc/nginx/ssl/prod_web.crt"
+    keyfile: "/etc/nginx/ssl/prod_web.key"
+  
+  # HAProxy example: combined certfile and keyfile (certfile == keyfile)
+  - servercert_name: "lb_haproxy_cert"
+    certfile: "/etc/haproxy/certs/haproxy.pem"
+    keyfile: "/etc/haproxy/certs/haproxy.pem"
+
+# Optional shell command executed AFTER successful certificate update.
+# Executed only if at least one certificate was updated.
+post_cmd: "systemctl reload nginx"

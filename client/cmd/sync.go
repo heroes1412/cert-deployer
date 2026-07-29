@@ -1,0 +1,139 @@
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+
+	"cert-agent/internal/agent"
+	"cert-agent/internal/config"
+
+	"github.com/spf13/cobra"
+)
+
+type ServerCertResponse struct {
+	ServercertName string `json:"servercert_name"`
+	CertPEM        string `json:"cert_pem"`
+	KeyPEM         string `json:"key_pem"`
+	SHA256         string `json:"sha256"`
+	NotAfter       string `json:"not_after"`
+	Error          string `json:"error"`
+}
+
+func logInfo(format string, a ...interface{}) {
+	fmt.Printf("[%s] [INFO] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, a...))
+}
+
+func logWarn(format string, a ...interface{}) {
+	fmt.Printf("[%s] [WARN] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, a...))
+}
+
+func logError(format string, a ...interface{}) {
+	fmt.Printf("[%s] [ERROR] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, a...))
+}
+
+var syncCmd = &cobra.Command{
+	Use:   "sync",
+	Short: "Synchronize certificates from Cert Vault Server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		logInfo("Starting certificate synchronization agent...")
+
+		cfg, err := config.LoadConfig(ConfigFile)
+		if err != nil {
+			logError("Failed to load configuration: %v", err)
+			return err
+		}
+
+		// Pre-flight Check: validate target directories
+		if err := cfg.ValidateTargetDirectories(); err != nil {
+			logError("Pre-flight directory check failed: %v", err)
+			return err
+		}
+
+		// 1. Run pre_cmd
+		if cfg.PreCmd != "" {
+			logInfo("Running pre_cmd: %s", cfg.PreCmd)
+			out, err := agent.ExecuteCommand(cfg.PreCmd, 30*time.Second)
+			if err != nil {
+				logError("pre_cmd failed: %v. Aborting update!", err)
+				os.Exit(1)
+			}
+			if out != "" {
+				logInfo("pre_cmd output: %s", out)
+			}
+		}
+
+		// 2. Sync Certificates
+		updatedCount := 0
+		httpClient := &http.Client{Timeout: 15 * time.Second}
+
+		for _, cert := range cfg.Certs {
+			logInfo("Processing cert mapping: %s", cert.ServercertName)
+
+			reqURL := fmt.Sprintf("%s/api/v1/certs/%s", cfg.ServerURL, cert.ServercertName)
+			req, err := http.NewRequest("GET", reqURL, nil)
+			if err != nil {
+				logError("Failed to create HTTP request for %s: %v", cert.ServercertName, err)
+				continue
+			}
+			req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
+
+			resp, err := httpClient.Do(req)
+			if err != nil || resp.StatusCode != http.StatusOK {
+				status := "CONN_ERR"
+				if resp != nil {
+					status = fmt.Sprintf("HTTP %d", resp.StatusCode)
+				}
+				logError("Failed to fetch cert %s from server: %s", cert.ServercertName, status)
+				continue
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			var certResp ServerCertResponse
+			if err := json.Unmarshal(body, &certResp); err != nil || certResp.CertPEM == "" {
+				logError("Invalid JSON response from server for %s", cert.ServercertName)
+				continue
+			}
+
+			// Check local SHA256 against server SHA256
+			localSHA, err := agent.ComputeFileSHA256(cert.CertFile)
+			if err == nil && localSHA == certResp.SHA256 {
+				logInfo("Certificate %s is already up to date (SHA256: %s). Skipping download.", cert.ServercertName, localSHA[:16])
+				continue
+			}
+
+			logInfo("Certificate update detected for %s. Writing updated files...", cert.ServercertName)
+			if err := agent.WriteCertAndKey(cert.CertFile, cert.KeyFile, certResp.CertPEM, certResp.KeyPEM); err != nil {
+				logError("Failed to write cert/key files for %s: %v", cert.ServercertName, err)
+				continue
+			}
+
+			logInfo("Successfully updated certificate files for %s", cert.ServercertName)
+			updatedCount++
+		}
+
+		logInfo("Synchronization complete. Total certificates updated: %d", updatedCount)
+
+		// 3. Run post_cmd if at least one cert was updated
+		if updatedCount > 0 && cfg.PostCmd != "" {
+			logInfo("Running post_cmd: %s", cfg.PostCmd)
+			out, err := agent.ExecuteCommand(cfg.PostCmd, 30*time.Second)
+			if err != nil {
+				logError("post_cmd failed after cert update!: %v", err)
+			} else {
+				logInfo("post_cmd executed successfully. Output: %s", out)
+			}
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(syncCmd)
+}
