@@ -17,13 +17,15 @@ import (
 )
 
 const (
-	AdminUser   = "admin"
-	AdminPass   = "admin123"
+	AdminUser         = "admin"
+	DefaultAdminPass  = "admin123"
 	SessionCookieName = "cert_vault_session"
 )
 
 type CertViewModel struct {
 	Name               string
+	CertData           string
+	KeyData            string
 	SHA256             string
 	SHA256Short        string
 	NotAfterFormatted  string
@@ -34,6 +36,7 @@ type CertViewModel struct {
 
 type TokenViewModel struct {
 	ID                 uint
+	Token              string
 	Description        string
 	HashShort          string
 	CreatedAtFormatted string
@@ -47,7 +50,9 @@ func ProcessLogin(c *gin.Context) {
 	user := c.PostForm("username")
 	pass := c.PostForm("password")
 
-	if user == AdminUser && pass == AdminPass {
+	currentPass := db.GetSetting("admin_password", DefaultAdminPass)
+
+	if user == AdminUser && pass == currentPass {
 		c.SetCookie(SessionCookieName, "valid_session", 3600*24, "/", "", false, true)
 		c.Redirect(http.StatusSeeOther, "/admin")
 		return
@@ -92,6 +97,8 @@ func ShowDashboard(c *gin.Context) {
 		}
 		certVMs = append(certVMs, CertViewModel{
 			Name:               cert.ServercertName,
+			CertData:           cert.CertData,
+			KeyData:            cert.KeyData,
 			SHA256:             cert.FingerprintSHA256,
 			SHA256Short:        shaShort,
 			NotAfterFormatted:  cert.NotAfter.Format("2006-01-02 15:04:05 UTC"),
@@ -112,6 +119,7 @@ func ShowDashboard(c *gin.Context) {
 		}
 		tokenVMs = append(tokenVMs, TokenViewModel{
 			ID:                 t.ID,
+			Token:              t.Token,
 			Description:        t.Description,
 			HashShort:          hashShort,
 			CreatedAtFormatted: t.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -170,7 +178,6 @@ func DeleteCertificate(c *gin.Context) {
 func GenerateAPIToken(c *gin.Context) {
 	desc := c.PostForm("description")
 
-	// Generate random 32 byte secret token
 	tokenBytes := make([]byte, 32)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {
@@ -182,12 +189,13 @@ func GenerateAPIToken(c *gin.Context) {
 	tokenHash := middleware.HashToken(rawToken)
 
 	newToken := models.APIToken{
+		Token:       rawToken,
 		TokenHash:   tokenHash,
 		Description: desc,
 	}
 	db.DB.Create(&newToken)
 
-	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+generated!+Copy+now:+"+rawToken)
+	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+generated+successfully")
 }
 
 func RevokeAPIToken(c *gin.Context) {
@@ -195,4 +203,28 @@ func RevokeAPIToken(c *gin.Context) {
 	id, _ := strconv.Atoi(idStr)
 	db.DB.Delete(&models.APIToken{}, id)
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+revoked")
+}
+
+func ChangePassword(c *gin.Context) {
+	currentPass := c.PostForm("current_password")
+	newPass := c.PostForm("new_password")
+	confirmPass := c.PostForm("confirm_password")
+
+	dbPass := db.GetSetting("admin_password", DefaultAdminPass)
+	if currentPass != dbPass {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Current+password+is+incorrect")
+		return
+	}
+
+	if newPass == "" || newPass != confirmPass {
+		c.Redirect(http.StatusSeeOther, "/admin?error=New+passwords+do+not+match+or+are+empty")
+		return
+	}
+
+	if err := db.SetSetting("admin_password", newPass); err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+update+password")
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/admin?msg=Admin+password+changed+successfully")
 }

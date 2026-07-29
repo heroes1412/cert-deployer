@@ -1,0 +1,4 @@
+- issue1: nên có có chế copy lại token đã tạo, k cần thiết phải ẩn đi.
+- issue2: task Add / Update Certificate, nên có nút Browse đến file, tránh việc phải copy, paste nội dung text của cert. SHA256 Fingerprint có nút Copy để copy thông tin Fingerprint
+- issue3: khi add 1 cert xong, không bấm vào tên cert hoặc có nút edit để update cert dc
+- issue4: chưa có chức năng đổi password quản trị

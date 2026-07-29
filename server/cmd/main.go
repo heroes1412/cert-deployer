@@ -45,6 +45,7 @@ func main() {
 		admin.POST("/certs/delete", handlers.DeleteCertificate)
 		admin.POST("/tokens/generate", handlers.GenerateAPIToken)
 		admin.POST("/tokens/revoke", handlers.RevokeAPIToken)
+		admin.POST("/password/change", handlers.ChangePassword)
 	}
 
 	// Redirect root to /admin
