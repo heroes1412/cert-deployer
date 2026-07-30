@@ -9,8 +9,8 @@ The **Cert Deployer** solution provides automated, secure, and centralized SSL/T
 ```mermaid
 graph TD
     subgraph WebAdmin["Web Admin & Security"]
-        Admin[System Administrator] -->|HTTPS / Web UI| ServerDashboard["Cert Server (Web Admin)"]
-        ServerDashboard -->|SQLite WAL Mode| DB[(cert-server.db)]
+        Admin["System Administrator"] -->|"HTTPS / Web UI"| ServerDashboard["Cert Server (Web Admin)"]
+        ServerDashboard -->|"SQLite WAL Mode"| DB[("cert-server.db")]
     end
 
     subgraph Clients["Enterprise Infrastructure (500+ Nodes)"]
@@ -19,13 +19,13 @@ graph TD
         AgentN["Cert Agent (Node N / IIS)"]
     end
 
-    Agent1 -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
-    Agent2 -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
-    AgentN -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
+    Agent1 -->|"HTTP GET /api/v1/certs/:name (Bearer Token)"| ServerDashboard
+    Agent2 -->|"HTTP GET /api/v1/certs/:name (Bearer Token)"| ServerDashboard
+    AgentN -->|"HTTP GET /api/v1/certs/:name (Bearer Token)"| ServerDashboard
 
-    Agent1 -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS1[Nginx Certs & Keys]
-    Agent2 -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS2[HAProxy PEM Bundle]
-    AgentN -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS3[IIS Cert Store]
+    Agent1 -->|"Atomic Write 0600 / 0644 (Preserve UID/GID)"| WebFS1["Nginx Certs & Keys"]
+    Agent2 -->|"Atomic Write 0600 / 0644 (Preserve UID/GID)"| WebFS2["HAProxy PEM Bundle"]
+    AgentN -->|"Atomic Write 0600 / 0644 (Preserve UID/GID)"| WebFS3["IIS Cert Store"]
 ```
 
 ### Component Overview
