@@ -33,6 +33,12 @@ jobs:
           username: ${{ vars.DOCKER_USERNAME || secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Generate Dynamic Docker Tag (DDMMYYYY)
+        id: docker_tag
+        run: |
+          DATE_STR=$(date +'%d%m%Y')
+          echo "DOCKER_TAG=${DATE_STR}" >> $GITHUB_ENV
+
       - name: Build and Push Multi-Arch Docker Image
         uses: docker/build-push-action@v5
         with:
@@ -41,5 +47,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            h2372/cert-deployer:29072026
+            h2372/cert-deployer:${{ env.DOCKER_TAG }}
             h2372/cert-deployer:latest
