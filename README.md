@@ -1,16 +1,53 @@
-# Centralized Certificate Management System (Server & Go Client)
+# Cert Deployer - Centralized Certificate Management System
 
 A production-grade, lightweight Certificate Management System built in Go.
 
 ## System Architecture
 
-The repository is structured into two independent components:
-- **`server/`**: Web Admin Dashboard + REST API backed by a pure Go SQLite database for SSL/TLS certificate management.
-- **`client/`**: CLI Agent (`cert-agent`) that synchronizes certificates on target servers based on `config.yaml`.
+The **Cert Deployer** solution provides automated, secure, and centralized SSL/TLS certificate management and distribution across enterprise networks (bare-metal, VMs, Docker containers, and Kubernetes clusters).
+
+```mermaid
+graph TD
+    subgraph WebAdmin["Web Admin & Security"]
+        Admin[System Administrator] -->|HTTPS / Web UI| ServerDashboard["Cert Server (Web Admin)"]
+        ServerDashboard -->|SQLite WAL Mode| DB[(cert-server.db)]
+    end
+
+    subgraph Clients["Enterprise Infrastructure (500+ Nodes)"]
+        Agent1["Cert Agent (Node 1 / Nginx)"]
+        Agent2["Cert Agent (Node 2 / HAProxy)"]
+        AgentN["Cert Agent (Node N / IIS)"]
+    end
+
+    Agent1 -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
+    Agent2 -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
+    AgentN -->|HTTP GET /api/v1/certs/:name<br>Bearer Token (Read-Only)| ServerDashboard
+
+    Agent1 -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS1[Nginx Certs & Keys]
+    Agent2 -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS2[HAProxy PEM Bundle]
+    AgentN -->|Atomic Write 0600/0644<br>Preserve Owner UID/GID| WebFS3[IIS Cert Store]
+```
+
+### Component Overview
+
+1. **Cert Server (`/server`)**:
+   - **Central Management Vault**: Stores certificate PEM bundles, private keys, SHA256 fingerprints, and expiration dates in a lightweight SQLite database (`cert-server.db`).
+   - **High-Concurrency Engine**: Configured with SQLite WAL (Write-Ahead Logging) Mode and 100% Read-Only API Token Authentication. Client sync requests perform pure non-blocking `SELECT` queries, supporting 500+ CCU without database lock contention.
+   - **Embedded Management UI**: Single-binary deployment containing an embedded Tailwind CSS Web Admin UI for certificate uploading, manual CRT/KEY downloading, password management, and API token generation.
+   - **Cross-Platform Host Runtime**: Native Windows SCM Service integration (`sc.exe`), Linux `systemd` unit files, multi-stage Docker container (`~15MB`), and Kubernetes manifests (`deploy/k8s/`).
+
+2. **Cert Agent (`/client`)**:
+   - **Target Node Synchronization**: Independent Go CLI executable installed on target web servers (Nginx, HAProxy, Apache, IIS, etc.).
+   - **Smart Check & Sync Workflow**:
+     - Computes local certificate SHA256 fingerprints and compares them against the Cert Server metadata before downloading. Skips download if local files are already up-to-date.
+     - Performs **Atomic Writes** using temporary files and atomic `os.Rename` operations to prevent web server downtime or corrupted certificate reads.
+     - Automatically inspects and **preserves existing file permissions (Chmod) and ownership (UID/GID)** on Linux/Unix systems so non-root processes (`nginx`, `haproxy`) retain read access.
+     - Enforces strict `0600` permissions on new private keys and `0644` on public certificates.
+   - **Lifecycle Command Execution**: Executes configurable pre-sync (`global_pre_cmd`, `pre_cmd`) and post-sync (`post_cmd`, `global_post_cmd`) commands/scripts (supporting `.sh`, `.bat`, `.cmd`, `.ps1`, and inline shell pipelines) to validate configs (`nginx -t`) and gracefully reload web servers (`systemctl reload nginx`).
 
 ---
 
-## 1. Server Component (`/server`)
+## 1. Cert Server (`/server`)
 
 ### Features
 - Embedded Web Admin UI (built with Go `embed.FS` and Tailwind CSS).
@@ -33,18 +70,18 @@ By default, the server runs on `http://localhost:8080` (Default credentials: Use
 
 Environment variables:
 - `PORT`: HTTP listener port (default `8080` or configured via Web UI Settings).
-- `DB_PATH`: SQLite database file path (default `data/cert-vault.db` or `cert-vault.db`).
+- `DB_PATH`: SQLite database file path (default `data/cert-server.db` or `cert-server.db`).
 
 ---
 
-## 2. Docker & Kubernetes Deployment (Server)
+## 2. Docker & Kubernetes Deployment (Cert Server)
 
 ### A. Docker Compose Deployment (1-Command Run)
 Run the server using Docker Compose with volume persistence at `/app/data`:
 ```bash
 docker-compose up -d --build
 ```
-This builds the multi-stage `server/Dockerfile` (~15MB image) and mounts persistent database storage to named volume `cert-vault-data`.
+This builds the multi-stage `server/Dockerfile` (~15MB image) and mounts persistent database storage to named volume `cert-server-data`.
 
 ### B. Kubernetes Deployment (K8s)
 All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Administrator/Desktop/cert-rotate-tool/deploy/k8s):
@@ -68,7 +105,7 @@ All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Adm
 
 ---
 
-## 3. Client Agent Component (`/client`)
+## 3. Cert Agent Component (`/client`)
 
 ### Features
 - CLI Commands: `cert-agent check` and `cert-agent sync`.
@@ -96,22 +133,31 @@ Using automated build scripts (compiled for both Windows & Linux):
 
 ---
 
-## 4. Native System Services Setup (Windows sc.exe & Linux Systemd)
+## 4. Native System Services Setup & Management
 
-### A. Windows Service Setup (Native `sc.exe`)
+### A. Windows Service Setup & Removal (Native `sc.exe`)
 No third-party tools required. Uses Windows native `sc.exe`:
 
-1. Build binaries using `build.bat`.
-2. Run `scripts/service_install_windows.bat` as Administrator:
-   ```cmd
-   scripts\service_install_windows.bat
-   ```
+- **Install & Start Service**: Run `scripts/service_install_windows.bat` as Administrator:
+  ```cmd
+  scripts\service_install_windows.bat
+  ```
+- **Stop & Uninstall Service**: Run `scripts/service_uninstall_windows.bat` as Administrator:
+  ```cmd
+  scripts\service_uninstall_windows.bat
+  ```
 
-### B. Linux Service Setup (Native Systemd)
-Run automated Linux service installer script as root:
-```bash
-sudo ./scripts/service_install_linux.sh
-```
+### B. Linux Service Setup & Removal (Native Systemd)
+Run automated Linux service management scripts as root:
+
+- **Install & Start Services**:
+  ```bash
+  sudo ./scripts/service_install_linux.sh
+  ```
+- **Stop & Uninstall Services**:
+  ```bash
+  sudo ./scripts/service_uninstall_linux.sh
+  ```
 
 ---
 

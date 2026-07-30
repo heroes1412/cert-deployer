@@ -48,7 +48,7 @@ func fileExists(path string) bool {
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
-	Short: "Synchronize certificates from Cert Vault Server",
+	Short: "Synchronize certificates from Cert Server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logInfo("Starting certificate synchronization agent...")
 

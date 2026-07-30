@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Automated Linux systemd service installer for Cert Vault Server & Client Agent
+# Automated Linux systemd service installer for Cert Deployer (Cert Server & Cert Agent)
 set -e
 
 if [ "$EUID" -ne 0 ]; then
@@ -8,24 +8,24 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "==================================================="
-echo "Installing Cert Vault Server & Client systemd Services"
+echo "Installing Cert Deployer (Cert Server & Cert Agent) systemd Services"
 echo "==================================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # 1. Install Server Service
-echo "[1/2] Setting up Cert Vault Server Service..."
-mkdir -p /opt/cert-vault
+echo "[1/2] Setting up Cert Server Service..."
+mkdir -p /opt/cert-server
 if [ -f "$ROOT_DIR/build/linux/cert-server" ]; then
-    cp "$ROOT_DIR/build/linux/cert-server" /opt/cert-vault/cert-server
-    chmod +x /opt/cert-vault/cert-server
+    cp "$ROOT_DIR/build/linux/cert-server" /opt/cert-server/cert-server
+    chmod +x /opt/cert-server/cert-server
 fi
 
 cp "$SCRIPT_DIR/cert-server.service" /etc/systemd/system/cert-server.service
 systemctl daemon-reload
 systemctl enable cert-server.service
-echo "[INFO] Server service installed! Start via: systemctl start cert-server"
+echo "[INFO] Cert Server service installed! Start via: systemctl start cert-server"
 
 # 2. Install Client Service & Timer
 echo "[2/2] Setting up Cert Agent Service & Timer..."
@@ -44,7 +44,7 @@ cp "$SCRIPT_DIR/cert-agent.service" /etc/systemd/system/cert-agent.service
 cp "$SCRIPT_DIR/cert-agent.timer" /etc/systemd/system/cert-agent.timer
 systemctl daemon-reload
 systemctl enable --now cert-agent.timer
-echo "[INFO] Client timer installed & activated! Check status via: systemctl status cert-agent.timer"
+echo "[INFO] Cert Agent timer installed & activated! Check status via: systemctl status cert-agent.timer"
 
 echo "==================================================="
 echo "Linux Systemd Services Successfully Installed!"

@@ -1,16 +1,16 @@
 [Unit]
-Description=Cert Vault Server (Certificate Management System)
+Description=Cert Server (Cert Deployer Solution)
 After=network.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/cert-vault
-ExecStart=/opt/cert-vault/cert-server
+WorkingDirectory=/opt/cert-server
+ExecStart=/opt/cert-server/cert-server
 Restart=always
 RestartSec=5s
 Environment="PORT=8080"
-Environment="DB_PATH=/opt/cert-vault/cert-vault.db"
+Environment="DB_PATH=/opt/cert-server/cert-server.db"
 
 [Install]
 WantedBy=multi-user.target

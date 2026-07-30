@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: cert-vault-server-service
+  name: cert-server-service
   namespace: default
 spec:
   type: ClusterIP
   selector:
-    app: cert-vault-server
+    app: cert-server
   ports:
     - port: 8080
       targetPort: 8080

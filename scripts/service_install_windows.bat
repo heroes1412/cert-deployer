@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ===================================================
-echo Windows Native Service Installer for Cert Vault Server (sc.exe)
+echo Windows Native Service Installer for Cert Server (sc.exe)
 echo ===================================================
 
 :: Check for Administrator privileges
@@ -22,26 +22,26 @@ if not exist "%SERVER_BIN%" (
     exit /b 1
 )
 
-echo [1/2] Registering CertVaultServer Windows Service natively via sc.exe...
-sc query CertVaultServer >nul 2>&1
+echo [1/2] Registering CertServer Windows Service natively via sc.exe...
+sc query CertServer >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [INFO] Service CertVaultServer already exists. Stopping and re-creating...
-    sc stop CertVaultServer >nul 2>&1
-    sc delete CertVaultServer >nul 2>&1
+    echo [INFO] Service CertServer already exists. Stopping and re-creating...
+    sc stop CertServer >nul 2>&1
+    sc delete CertServer >nul 2>&1
     timeout /t 2 /nobreak >nul
 )
 
-sc create CertVaultServer binPath= "\"%SERVER_BIN%\"" start= auto displayname= "Cert Vault Server Service"
-sc description CertVaultServer "Centralized Certificate Management System Server"
-sc start CertVaultServer
+sc create CertServer binPath= "\"%SERVER_BIN%\"" start= auto displayname= "Cert Server Service"
+sc description CertServer "Cert Server Component of Cert Deployer Solution"
+sc start CertServer
 
 echo.
 echo ===================================================
-echo SUCCESS: CertVaultServer Windows Service Registered!
+echo SUCCESS: CertServer Windows Service Registered!
 echo Management Commands:
-echo   - Start:   sc start CertVaultServer
-echo   - Stop:    sc stop CertVaultServer
-echo   - Status:  sc query CertVaultServer
-echo   - Remove:  sc delete CertVaultServer
+echo   - Start:   sc start CertServer
+echo   - Stop:    sc stop CertServer
+echo   - Status:  sc query CertServer
+echo   - Remove:  sc delete CertServer
 echo ===================================================
 pause

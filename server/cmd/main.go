@@ -37,11 +37,13 @@ func initEnvironment() {
 func runServer() {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		if _, err := os.Stat("cert-vault.db"); err == nil {
+		if _, err := os.Stat("cert-server.db"); err == nil {
+			dbPath = "cert-server.db"
+		} else if _, err := os.Stat("cert-vault.db"); err == nil {
 			dbPath = "cert-vault.db"
 		} else {
 			_ = os.MkdirAll("data", 0755)
-			dbPath = filepath.Join("data", "cert-vault.db")
+			dbPath = filepath.Join("data", "cert-server.db")
 		}
 	}
 
@@ -91,9 +93,9 @@ func runServer() {
 		port = db.GetSetting("server_port", "8080")
 	}
 
-	log.Printf("[INFO] Server starting on http://localhost:%s", port)
+	log.Printf("[INFO] Cert Server starting on http://localhost:%s", port)
 	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("Server failed to run: %v", err)
+		log.Fatalf("Cert Server failed to run: %v", err)
 	}
 }
 

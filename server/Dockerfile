@@ -29,7 +29,7 @@ COPY --from=builder /app/cert-server /app/cert-server
 
 # Environment variables
 ENV PORT=8080
-ENV DB_PATH=/app/data/cert-vault.db
+ENV DB_PATH=/app/data/cert-server.db
 
 # Expose server port
 EXPOSE 8080

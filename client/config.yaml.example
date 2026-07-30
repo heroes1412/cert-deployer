@@ -1,9 +1,9 @@
-# Certificate Management System Agent Configuration
+# Cert Agent Configuration (Cert Deployer)
 
-# URL of the Cert Vault Server
+# URL of the Cert Server
 server_url: "http://localhost:8080"
 
-# Bearer Token generated from Server Admin UI
+# Bearer Token generated from Cert Server Admin UI
 auth_token: "your-generated-bearer-token-here"
 
 # Global command executed ONCE before any certificate sync session starts

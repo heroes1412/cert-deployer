@@ -36,24 +36,24 @@ jobs:
 
           # 1. Windows amd64
           echo "Building for Windows amd64..."
-          (cd server && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-server.exe .)
-          (cd client && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-agent.exe .)
-          zip -j release_assets/cert-deployer-server-windows-amd64.zip server/cert-deployer-server.exe client/config.yaml.example
-          zip -j release_assets/cert-deployer-agent-windows-amd64.zip client/cert-deployer-agent.exe client/config.yaml.example
+          (cd server && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-server.exe .)
+          (cd client && GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o cert-agent.exe .)
+          zip -j release_assets/cert-server-windows-amd64.zip server/cert-server.exe client/config.yaml.example
+          zip -j release_assets/cert-agent-windows-amd64.zip client/cert-agent.exe client/config.yaml.example
 
           # 2. Linux amd64
           echo "Building for Linux amd64..."
-          (cd server && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-server .)
-          (cd client && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-deployer-agent .)
-          tar -czvf release_assets/cert-deployer-server-linux-amd64.tar.gz -C server cert-deployer-server -C ../client config.yaml.example
-          tar -czvf release_assets/cert-deployer-agent-linux-amd64.tar.gz -C client cert-deployer-agent -C ../client config.yaml.example
+          (cd server && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-server .)
+          (cd client && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cert-agent .)
+          tar -czvf release_assets/cert-server-linux-amd64.tar.gz -C server cert-server -C ../client config.yaml.example
+          tar -czvf release_assets/cert-agent-linux-amd64.tar.gz -C client cert-agent -C ../client config.yaml.example
 
           # 3. Linux arm64
           echo "Building for Linux arm64..."
-          (cd server && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-deployer-server-arm64 .)
-          (cd client && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-deployer-agent-arm64 .)
-          tar -czvf release_assets/cert-deployer-server-linux-arm64.tar.gz -C server cert-deployer-server-arm64 -C ../client config.yaml.example
-          tar -czvf release_assets/cert-deployer-agent-linux-arm64.tar.gz -C client cert-deployer-agent-arm64 -C ../client config.yaml.example
+          (cd server && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-server-arm64 .)
+          (cd client && GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cert-agent-arm64 .)
+          tar -czvf release_assets/cert-server-linux-arm64.tar.gz -C server cert-server-arm64 -C ../client config.yaml.example
+          tar -czvf release_assets/cert-agent-linux-arm64.tar.gz -C client cert-agent-arm64 -C ../client config.yaml.example
 
       - name: Generate Dynamic Release Tag
         id: release_tag
@@ -69,16 +69,16 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: "Release ${{ env.TAG_NAME }}"
           body: |
-            Automated production binary release for **cert-deployer**.
+            Automated production binary release for **Cert Deployer** (Cert Server & Cert Agent).
 
             ### 📦 Binaries Included
-            Includes Server & Client Agent binaries compiled for Windows (amd64) and Linux (amd64, arm64), pre-packaged with sample `config.yaml.example`:
-            - `cert-deployer-server-windows-amd64.zip`
-            - `cert-deployer-agent-windows-amd64.zip`
-            - `cert-deployer-server-linux-amd64.tar.gz`
-            - `cert-deployer-agent-linux-amd64.tar.gz`
-            - `cert-deployer-server-linux-arm64.tar.gz`
-            - `cert-deployer-agent-linux-arm64.tar.gz`
+            Includes Cert Server & Cert Agent binaries compiled for Windows (amd64) and Linux (amd64, arm64), pre-packaged with sample `config.yaml.example`:
+            - `cert-server-windows-amd64.zip`
+            - `cert-agent-windows-amd64.zip`
+            - `cert-server-linux-amd64.tar.gz`
+            - `cert-agent-linux-amd64.tar.gz`
+            - `cert-server-linux-arm64.tar.gz`
+            - `cert-agent-linux-arm64.tar.gz`
 
             ### 🐳 Corresponding Docker Hub Image
             - **Docker Image**: `h2372/cert-deployer:${{ env.DOCKER_TAG }}`

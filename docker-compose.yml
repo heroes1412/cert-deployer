@@ -5,15 +5,15 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: cert-vault-server
+    container_name: cert-server
     restart: always
     ports:
       - "8080:8080"
     environment:
       - PORT=8080
-      - DB_PATH=/app/data/cert-vault.db
+      - DB_PATH=/app/data/cert-server.db
     volumes:
-      - cert-vault-data:/app/data
+      - cert-server-data:/app/data
 
 volumes:
-  cert-vault-data:
+  cert-server-data:

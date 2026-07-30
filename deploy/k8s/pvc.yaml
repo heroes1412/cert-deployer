@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: cert-vault-pvc
+  name: cert-deployer-pvc
   namespace: default
 spec:
   accessModes:

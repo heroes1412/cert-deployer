@@ -8,9 +8,9 @@ import (
 	"golang.org/x/sys/windows/svc"
 )
 
-type certVaultService struct{}
+type certServerService struct{}
 
-func (m *certVaultService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
+func (m *certServerService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	changes <- svc.Status{State: svc.StartPending}
 
@@ -49,7 +49,7 @@ func runWindowsServiceIfService() bool {
 	}
 
 	if isService {
-		err = svc.Run("CertVaultServer", &certVaultService{})
+		err = svc.Run("CertServer", &certServerService{})
 		if err != nil {
 			log.Printf("[ERROR] Windows Service failed to run: %v", err)
 		}

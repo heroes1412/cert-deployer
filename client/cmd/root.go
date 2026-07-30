@@ -11,8 +11,8 @@ var ConfigFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "cert-agent",
-	Short: "Certificate Auto Rotation Agent",
-	Long:  `A lightweight CLI Agent for synchronizing SSL/TLS certificates from Cert Vault Server.`,
+	Short: "Cert Agent - Certificate Synchronization CLI Tool",
+	Long:  `Cert Agent: A lightweight CLI Agent for synchronizing SSL/TLS certificates from Cert Server.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// If user did not pass -c / --config explicitly
 		if !cmd.Flags().Changed("config") {
