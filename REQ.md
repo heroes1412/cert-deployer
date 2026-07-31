@@ -168,3 +168,20 @@ Complete Go source code for Client (agent check and agent sync).
 Sample config.yaml for Client.
 
 Deployment steps and example crontab entry for Client.
+
+---
+
+## 6. ACME & EXTENSIONS SPECIFICATION (LET'S ENCRYPT / ZEROSSL & NOTIFICATIONS)
+
+### 6.1 ACME Engine Integration
+- **Certificate Authorities**: Let's Encrypt Production, Let's Encrypt Staging, ZeroSSL.
+- **Challenge Type**: DNS-01 Challenge Validation (for internal enterprise network isolation without NAT/Public IP).
+- **Supported DNS-01 Providers**: Cloudflare DNS, DigitalOcean DNS, AWS Route53, GoDaddy DNS.
+- **ZeroSSL EAB**: External Account Binding (`EAB Key ID` & `EAB HMAC Key`).
+
+### 6.2 Multi-Channel Alert Notifications
+- Sub-menu tab in Web Admin Settings Modal for configuring expiration warning alerts (7, 14, 30 days thresholds).
+- Supported Notification Channels: Telegram Bot, Slack Incoming Webhook, Custom Generic Webhook, Email SMTP.
+
+### 6.3 Client Environment Token Hardening
+- `CERT_AGENT_TOKEN` environment variable support in `cert-agent` for ISO 27001 / PCI-DSS compliant token provisioning.

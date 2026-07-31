@@ -73,6 +73,20 @@
             document.getElementById('key_data').value = keyData;
             document.getElementById('addModal').classList.remove('hidden');
         }
+
+        function openACMEModal() {
+            document.getElementById('acmeModal').classList.remove('hidden');
+        }
+
+        function toggleZeroSSLEABFields(val) {
+            const section = document.getElementById('zeroSSLEABSection');
+            if (!section) return;
+            if (val === 'zerossl') {
+                section.classList.remove('hidden');
+            } else {
+                section.classList.add('hidden');
+            }
+        }
     </script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
@@ -111,9 +125,14 @@
                     <h2 class="text-lg font-bold text-slate-100">Certificates</h2>
                     <p class="text-xs text-slate-400 mt-1">Managed SSL/TLS certificates and key bundles</p>
                 </div>
-                <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
-                    + Add / Update Cert
-                </button>
+                <div class="flex items-center gap-3">
+                    <button onclick="openACMEModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
+                        + Issue via ACME (Let's Encrypt)
+                    </button>
+                    <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
+                        + Add / Update Cert
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto">
@@ -282,39 +301,274 @@
         </div>
     </div>
 
+    <!-- Issue via ACME Modal -->
+    <div id="acmeModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-xl shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">🔒 Issue Certificate via ACME (Let's Encrypt / ZeroSSL)</h3>
+                <button onclick="document.getElementById('acmeModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+
+            <form action="/admin/certs/acme/issue" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">ServerCert Name (Unique Key)</label>
+                    <input type="text" name="servercert_name" placeholder="e.g. prod_web_acme" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Domain Name(s) (Comma separated for SAN)</label>
+                    <input type="text" name="domains" placeholder="example.com, www.example.com" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">ACME Certificate Authority</label>
+                        <select name="acme_provider" onchange="toggleZeroSSLEABFields(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            <option value="letsencrypt-prod">Let's Encrypt (Production)</option>
+                            <option value="letsencrypt-staging">Let's Encrypt (Staging)</option>
+                            <option value="zerossl">ZeroSSL</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Challenge Validation Method</label>
+                        <input type="hidden" name="challenge_type" value="dns-01">
+                        <div class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-emerald-400 font-semibold flex items-center gap-2">
+                            <span>🔑 DNS-01 (DNS API Token)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ZeroSSL EAB Credentials (Hidden by default, shown when ZeroSSL selected) -->
+                <div id="zeroSSLEABSection" class="hidden space-y-3 bg-slate-950 border border-slate-800 p-3 rounded-lg">
+                    <div class="text-[11px] text-blue-400">💡 ZeroSSL ACME requires EAB (External Account Binding) credentials from your ZeroSSL account dashboard.</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">ZeroSSL EAB Key ID</label>
+                            <input type="text" name="eab_kid" placeholder="EAB Key ID" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">ZeroSSL EAB HMAC Key</label>
+                            <input type="password" name="eab_hmac_key" placeholder="EAB HMAC Key" class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">DNS Provider</label>
+                        <select name="dns_provider" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            <option value="cloudflare">Cloudflare DNS</option>
+                            <option value="digitalocean">DigitalOcean DNS</option>
+                            <option value="route53">AWS Route53</option>
+                            <option value="godaddy">GoDaddy DNS</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">DNS API Token / Secret</label>
+                        <input type="password" name="dns_api_token" placeholder="DNS Provider API Token or Secret Key" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">ACME Registration Email</label>
+                    <input type="email" name="email" placeholder="admin@example.com" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                    <input type="checkbox" id="auto_renew" name="auto_renew" checked class="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0">
+                    <label for="auto_renew" class="text-xs text-slate-300 cursor-pointer">Auto-renew certificate before expiration (30 days remaining threshold)</label>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="document.getElementById('acmeModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold">Request ACME Issue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- System Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-50">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-lg shadow-2xl space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-2xl shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-slate-800 pb-4">
                 <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">⚙️ System Settings</h3>
                 <button onclick="document.getElementById('settingsModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
             </div>
 
+            <!-- Sub-menu Tabs -->
+            <div class="flex border-b border-slate-800 gap-4 text-xs font-semibold">
+                <button type="button" id="tabGeneralBtn" onclick="switchSettingsTab('general')" class="pb-2 border-b-2 border-blue-500 text-blue-400">
+                    🔧 General & Security
+                </button>
+                <button type="button" id="tabNotifyBtn" onclick="switchSettingsTab('notify')" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                    🔔 Notifications
+                </button>
+            </div>
+
+            <script>
+                function switchSettingsTab(tabName) {
+                    const generalTab = document.getElementById('tabGeneralContent');
+                    const notifyTab = document.getElementById('tabNotifyContent');
+                    const generalBtn = document.getElementById('tabGeneralBtn');
+                    const notifyBtn = document.getElementById('tabNotifyBtn');
+
+                    if (tabName === 'general') {
+                        generalTab.classList.remove('hidden');
+                        notifyTab.classList.add('hidden');
+                        generalBtn.classList.add('border-blue-500', 'text-blue-400');
+                        generalBtn.classList.remove('border-transparent', 'text-slate-400');
+                        notifyBtn.classList.remove('border-blue-500', 'text-blue-400');
+                        notifyBtn.classList.add('border-transparent', 'text-slate-400');
+                    } else {
+                        generalTab.classList.add('hidden');
+                        notifyTab.classList.remove('hidden');
+                        notifyBtn.classList.add('border-blue-500', 'text-blue-400');
+                        notifyBtn.classList.remove('border-transparent', 'text-slate-400');
+                        generalBtn.classList.remove('border-blue-500', 'text-blue-400');
+                        generalBtn.classList.add('border-transparent', 'text-slate-400');
+                    }
+                }
+            </script>
+
             <form action="/admin/settings/save" method="POST" class="space-y-6">
-                <!-- Section 1: Server Configuration -->
-                <div class="space-y-3">
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400">Server Configuration</h4>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-1">HTTP Management Port</label>
-                        <input type="number" name="server_port" value="{{ .serverPort }}" required min="1" max="65535" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
-                        <p class="text-[11px] text-slate-500 mt-1">Changes take effect upon server restart.</p>
+                <!-- TAB 1: GENERAL & SECURITY -->
+                <div id="tabGeneralContent" class="space-y-6">
+                    <!-- Section 1: Server Configuration -->
+                    <div class="space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400">Server Configuration</h4>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">HTTP Management Port</label>
+                            <input type="number" name="server_port" value="{{ .serverPort }}" required min="1" max="65535" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            <p class="text-[11px] text-slate-500 mt-1">Changes take effect upon server restart.</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Admin Password -->
+                    <div class="space-y-3 border-t border-slate-800 pt-4">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400">Change Admin Password (Optional)</h4>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Current Password</label>
+                            <input type="password" name="current_password" placeholder="Leave blank to keep current password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">New Password</label>
+                            <input type="password" name="new_password" placeholder="New password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Confirm New Password</label>
+                            <input type="password" name="confirm_password" placeholder="Confirm new password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                        </div>
                     </div>
                 </div>
 
-                <!-- Section 2: Admin Password -->
-                <div class="space-y-3 border-t border-slate-800 pt-4">
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400">Change Admin Password (Optional)</h4>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-1">Current Password</label>
-                        <input type="password" name="current_password" placeholder="Leave blank to keep current password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                <!-- TAB 2: NOTIFICATIONS -->
+                <div id="tabNotifyContent" class="space-y-6 hidden">
+                    <div class="bg-blue-500/10 border border-blue-500/20 text-blue-300 p-3 rounded-lg text-xs">
+                        💡 Automatically send alert notifications when certificates are approaching expiration (default 7, 14, 30 days).
                     </div>
+
+                    <!-- Thresholds -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-1">New Password</label>
-                        <input type="password" name="new_password" placeholder="New password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Expiration Warning Thresholds in Days (comma separated)</label>
+                        <input type="text" name="notify_days_thresholds" value="{{ .notifyDaysThresholds }}" placeholder="7,14,30" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 mb-1">Confirm New Password</label>
-                        <input type="password" name="confirm_password" placeholder="Confirm new password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+
+                    <!-- Telegram Config -->
+                    <div class="space-y-3 border-t border-slate-800 pt-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                                ✈️ Telegram Bot Notification
+                            </h4>
+                            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="enable_telegram" {{ if .enableTelegram }}checked{{ end }} class="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0">
+                                Enable Telegram
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Bot Token</label>
+                                <input type="text" name="telegram_bot_token" value="{{ .telegramBotToken }}" placeholder="123456789:ABCdef..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Chat ID</label>
+                                <input type="text" name="telegram_chat_id" value="{{ .telegramChatID }}" placeholder="-100123456789" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Slack Config -->
+                    <div class="space-y-3 border-t border-slate-800 pt-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                                💬 Slack Incoming Webhook
+                            </h4>
+                            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="enable_slack" {{ if .enableSlack }}checked{{ end }} class="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0">
+                                Enable Slack
+                            </label>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Webhook URL</label>
+                            <input type="text" name="slack_webhook_url" value="{{ .slackWebhookURL }}" placeholder="https://hooks.slack.com/services/..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                        </div>
+                    </div>
+
+                    <!-- Custom Generic Webhook Config -->
+                    <div class="space-y-3 border-t border-slate-800 pt-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                                🔗 Custom Generic Webhook
+                            </h4>
+                            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="enable_webhook" {{ if .enableWebhook }}checked{{ end }} class="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0">
+                                Enable Custom Webhook
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Webhook Endpoint URL</label>
+                                <input type="text" name="custom_webhook_url" value="{{ .customWebhookURL }}" placeholder="https://api.company.com/webhooks/cert-alert" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Secret / Auth Token (Optional)</label>
+                                <input type="text" name="custom_webhook_secret" value="{{ .customWebhookSecret }}" placeholder="Bearer token or secret key" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Email SMTP Config -->
+                    <div class="space-y-3 border-t border-slate-800 pt-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                                ✉️ Email SMTP Notification
+                            </h4>
+                            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="enable_email" {{ if .enableEmail }}checked{{ end }} class="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0">
+                                Enable Email
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">SMTP Host</label>
+                                <input type="text" name="email_smtp_host" value="{{ .emailSMTPHost }}" placeholder="smtp.gmail.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">SMTP Port</label>
+                                <input type="number" name="email_smtp_port" value="{{ .emailSMTPPort }}" placeholder="587" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">SMTP User / From Email</label>
+                                <input type="text" name="email_smtp_user" value="{{ .emailSMTPUser }}" placeholder="alerts@company.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">SMTP Password</label>
+                                <input type="password" name="email_smtp_pass" placeholder="App password" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">Recipient Emails (comma separated)</label>
+                            <input type="text" name="email_recipient" value="{{ .emailRecipient }}" placeholder="admin@company.com, devops@company.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                        </div>
                     </div>
                 </div>
 

@@ -51,6 +51,9 @@ graph TD
 
 ### Features
 - Embedded Web Admin UI (built with Go `embed.FS` and Tailwind CSS).
+- **Automated ACME Certificate Engine**: Integrated Lego engine (`github.com/go-acme/lego/v4`) supporting 1-click SSL/TLS issuance for **Let's Encrypt** (Production & Staging) and **ZeroSSL** (with EAB credentials).
+- **DNS-01 Challenge Validation**: Native DNS-01 automation for **Cloudflare**, **DigitalOcean**, **AWS Route53**, and **GoDaddy** (no public IP or NAT Port 80/443 required on internal networks).
+- **Multi-Channel Alert Notifications**: Configurable sub-tab in Web Settings for **Telegram Bot**, **Slack Webhook**, **Custom Generic Webhook**, and **Email SMTP** with configurable threshold days (7, 14, 30 days).
 - SQLite Database storing certificate PEM contents, public key fingerprints (SHA256), and expiration dates (`not_after`).
 - Automatic X.509 certificate parsing and public/private key cryptographic consistency check prior to saving.
 - Download Cert (`.crt`) and Download Key (`.key`) buttons directly from the Web UI modal.
@@ -109,6 +112,7 @@ All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Adm
 
 ### Features
 - CLI Commands: `cert-agent check` and `cert-agent sync`.
+- **Environment Variable Auth Token**: Supports reading Bearer token from `CERT_AGENT_TOKEN` environment variable (overriding/supplementing `config.yaml` for ISO 27001 / PCI-DSS compliance).
 - Auto-detects `./config.yaml` in the current working directory if `-c` is omitted.
 - Supports both Linux (`sh -c`) and Windows (`cmd /c`) shell command and script file execution.
 - Global commands (`global_pre_cmd`, `global_post_cmd`) and per-certificate commands (`pre_cmd`, `post_cmd`).

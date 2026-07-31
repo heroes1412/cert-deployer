@@ -53,6 +53,7 @@ func runServer() {
 	}
 
 	r := gin.Default()
+	_ = r.SetTrustedProxies(nil)
 
 	// Load embedded HTML templates
 	templ := template.Must(template.ParseFS(templates.FS, "*.html"))
@@ -70,6 +71,7 @@ func runServer() {
 		admin.GET("", handlers.ShowDashboard)
 		admin.POST("/certs/save", handlers.SaveCertificate)
 		admin.POST("/certs/delete", handlers.DeleteCertificate)
+		admin.POST("/certs/acme/issue", handlers.IssueACMECertificate)
 		admin.POST("/tokens/generate", handlers.GenerateAPIToken)
 		admin.POST("/tokens/revoke", handlers.RevokeAPIToken)
 		admin.POST("/settings/save", handlers.SaveSettings)

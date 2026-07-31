@@ -92,6 +92,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 
+	// Support reading Auth Token from environment variable CERT_AGENT_TOKEN
+	if envToken := strings.TrimSpace(os.Getenv("CERT_AGENT_TOKEN")); envToken != "" {
+		cfg.AuthToken = envToken
+	}
+
 	for i := range cfg.Certs {
 		if cfg.Certs[i].CertFile != "" {
 			cfg.Certs[i].CertFile = filepath.Clean(cfg.Certs[i].CertFile)

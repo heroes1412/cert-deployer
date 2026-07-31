@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cert-server/internal/acme"
 	"cert-server/internal/crypto"
 	"cert-server/internal/db"
 	"cert-server/internal/middleware"
@@ -139,11 +140,26 @@ func ShowDashboard(c *gin.Context) {
 	serverPort := db.GetSetting("server_port", "8080")
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"certs":      certVMs,
-		"tokens":     tokenVMs,
-		"serverPort": serverPort,
-		"msg":        msg,
-		"error":      errMsg,
+		"certs":                  certVMs,
+		"tokens":                 tokenVMs,
+		"serverPort":             serverPort,
+		"msg":                    msg,
+		"error":                  errMsg,
+		"telegramBotToken":       db.GetSetting("telegram_bot_token", ""),
+		"telegramChatID":         db.GetSetting("telegram_chat_id", ""),
+		"slackWebhookURL":        db.GetSetting("slack_webhook_url", ""),
+		"emailSMTPHost":          db.GetSetting("email_smtp_host", ""),
+		"emailSMTPPort":          db.GetSetting("email_smtp_port", "587"),
+		"emailSMTPUser":          db.GetSetting("email_smtp_user", ""),
+		"emailSMTPPass":          db.GetSetting("email_smtp_pass", ""),
+		"emailRecipient":         db.GetSetting("email_recipient", ""),
+		"notifyDaysThresholds":   db.GetSetting("notify_days_thresholds", "7,14,30"),
+		"enableTelegram":         db.GetSetting("enable_telegram", "false") == "true",
+		"enableSlack":            db.GetSetting("enable_slack", "false") == "true",
+		"enableEmail":            db.GetSetting("enable_email", "false") == "true",
+		"customWebhookURL":       db.GetSetting("custom_webhook_url", ""),
+		"customWebhookSecret":    db.GetSetting("custom_webhook_secret", ""),
+		"enableWebhook":          db.GetSetting("enable_webhook", "false") == "true",
 	})
 }
 
@@ -247,7 +263,42 @@ func SaveSettings(c *gin.Context) {
 		}
 	}
 
-	// 2. Handle Password Change if requested
+	// 2. Handle Notification Settings Update
+	_ = db.SetSetting("telegram_bot_token", c.PostForm("telegram_bot_token"))
+	_ = db.SetSetting("telegram_chat_id", c.PostForm("telegram_chat_id"))
+	_ = db.SetSetting("slack_webhook_url", c.PostForm("slack_webhook_url"))
+	_ = db.SetSetting("email_smtp_host", c.PostForm("email_smtp_host"))
+	_ = db.SetSetting("email_smtp_port", c.PostForm("email_smtp_port"))
+	_ = db.SetSetting("email_smtp_user", c.PostForm("email_smtp_user"))
+	_ = db.SetSetting("email_smtp_pass", c.PostForm("email_smtp_pass"))
+	_ = db.SetSetting("email_recipient", c.PostForm("email_recipient"))
+	_ = db.SetSetting("notify_days_thresholds", c.PostForm("notify_days_thresholds"))
+
+	_ = db.SetSetting("custom_webhook_url", c.PostForm("custom_webhook_url"))
+	_ = db.SetSetting("custom_webhook_secret", c.PostForm("custom_webhook_secret"))
+
+	if c.PostForm("enable_telegram") == "on" || c.PostForm("enable_telegram") == "true" {
+		_ = db.SetSetting("enable_telegram", "true")
+	} else {
+		_ = db.SetSetting("enable_telegram", "false")
+	}
+	if c.PostForm("enable_slack") == "on" || c.PostForm("enable_slack") == "true" {
+		_ = db.SetSetting("enable_slack", "true")
+	} else {
+		_ = db.SetSetting("enable_slack", "false")
+	}
+	if c.PostForm("enable_email") == "on" || c.PostForm("enable_email") == "true" {
+		_ = db.SetSetting("enable_email", "true")
+	} else {
+		_ = db.SetSetting("enable_email", "false")
+	}
+	if c.PostForm("enable_webhook") == "on" || c.PostForm("enable_webhook") == "true" {
+		_ = db.SetSetting("enable_webhook", "true")
+	} else {
+		_ = db.SetSetting("enable_webhook", "false")
+	}
+
+	// 3. Handle Password Change if requested
 	if currentPass != "" || newPass != "" {
 		dbPass := db.GetSetting("admin_password", DefaultAdminPass)
 		if currentPass != dbPass {
@@ -267,4 +318,75 @@ func SaveSettings(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusSeeOther, "/admin?msg="+msg)
+}
+
+func IssueACMECertificate(c *gin.Context) {
+	name := strings.TrimSpace(c.PostForm("servercert_name"))
+	domainStr := strings.TrimSpace(c.PostForm("domains"))
+	acmeProvider := strings.TrimSpace(c.PostForm("acme_provider"))
+	dnsProvider := strings.TrimSpace(c.PostForm("dns_provider"))
+	dnsToken := strings.TrimSpace(c.PostForm("dns_api_token"))
+	email := strings.TrimSpace(c.PostForm("email"))
+	eabKid := strings.TrimSpace(c.PostForm("eab_kid"))
+	eabHmac := strings.TrimSpace(c.PostForm("eab_hmac_key"))
+
+	if name == "" || domainStr == "" || dnsToken == "" || email == "" {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Please+fill+in+all+required+fields+(Name,+Domains,+Email,+DNS+Token)")
+		return
+	}
+
+	domainList := strings.Split(domainStr, ",")
+	var cleanedDomains []string
+	for _, d := range domainList {
+		d = strings.TrimSpace(d)
+		if d != "" {
+			cleanedDomains = append(cleanedDomains, d)
+		}
+	}
+
+	req := acme.ACMERequest{
+		ServerCertName: name,
+		Domains:        cleanedDomains,
+		ACMEProvider:   acmeProvider,
+		DNSProvider:    dnsProvider,
+		DNSAPIToken:    dnsToken,
+		Email:          email,
+		EABKID:         eabKid,
+		EABHMACKey:     eabHmac,
+	}
+
+	// 1. Issue ACME Certificate via lego engine
+	res, err := acme.IssueCertificate(req)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin?error=ACME+Issuance+Failed:+"+strings.ReplaceAll(err.Error(), " ", "+"))
+		return
+	}
+
+	// 2. Parse X.509 cert info
+	certInfo, err := crypto.ValidateAndParseCert(res.CertPEM, res.KeyPEM)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+parse+issued+ACME+certificate")
+		return
+	}
+
+	// 3. Save directly into SQLite Database
+	var existing models.Certificate
+	if err := db.DB.Where("servercert_name = ?", name).First(&existing).Error; err == nil {
+		existing.CertData = res.CertPEM
+		existing.KeyData = res.KeyPEM
+		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
+		existing.NotAfter = certInfo.NotAfter
+		db.DB.Save(&existing)
+	} else {
+		newCert := models.Certificate{
+			ServercertName:    name,
+			CertData:          res.CertPEM,
+			KeyData:           res.KeyPEM,
+			FingerprintSHA256: certInfo.FingerprintSHA256,
+			NotAfter:          certInfo.NotAfter,
+		}
+		db.DB.Create(&newCert)
+	}
+
+	c.Redirect(http.StatusSeeOther, "/admin?msg=ACME+Certificate+successfully+issued+and+saved+for+"+name)
 }
