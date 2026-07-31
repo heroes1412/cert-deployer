@@ -113,6 +113,7 @@ All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Adm
 - Supports both Linux (`sh -c`) and Windows (`cmd /c`) shell command and script file execution.
 - Global commands (`global_pre_cmd`, `global_post_cmd`) and per-certificate commands (`pre_cmd`, `post_cmd`).
 - Robust Windows path preprocessing: supports natural single backslashes `\` (`"D:\tmp\1 1\expired.pem"`) without YAML escape errors.
+- Automatic backup of existing cert/key files before overwriting (saves copy in the same directory as `<filename>.<DDMMYYYY>.bak` preserving mode/owner).
 - Atomic file writes using temporary files and atomic `os.Rename`.
 - Preserves existing file permissions (Mode) and ownership (UID/GID on Linux/Unix).
 - Strict file permission `0600` fallback for new private key files (`0644` for public certs).
