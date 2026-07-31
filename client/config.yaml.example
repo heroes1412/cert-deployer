@@ -11,19 +11,27 @@ global_pre_cmd: "echo 'Starting global pre-check session...'"
 
 # List of certificates to sync
 certs:
-  # Nginx example: separate certfile and keyfile with per-cert pre_cmd / post_cmd
+  # 1. Nginx example: separate certfile and keyfile with per-cert pre_cmd / post_cmd
   - servercert_name: "prod_web_cert"
     certfile: "D:\vnshell\it\Linux\prod_web.crt"
     keyfile: "D:\vnshell\it\Linux\prod_web.key"
     pre_cmd: "nginx -t"
     post_cmd: "systemctl reload nginx"
   
-  # HAProxy example: combined certfile and keyfile
+  # 2. HAProxy example: combined certfile and keyfile
   - servercert_name: "lb_haproxy_cert"
     certfile: "/etc/haproxy/certs/haproxy.pem"
     keyfile: "/etc/haproxy/certs/haproxy.pem"
     pre_cmd: "haproxy -c -f /etc/haproxy/haproxy.cfg"
     post_cmd: "systemctl reload haproxy"
+
+  # 3. IIS (Windows) example: PFX file generation & auto-import into Windows Cert Store + IIS binding
+  - servercert_name: "iis_web_cert"
+    pfxfile: "C:\certs\iis_web.pfx"          # Setting pfxfile enables IIS/PFX Mode (auto creates parent folders)
+    pfx_password: "MySecretPassword123"      # Optional: Password for PFX file (leave "" for unencrypted)
+    iis_site_name: "Default Web Site"         # Optional: Name of IIS Web Site to auto-import & bind certificate
+    iis_binding_host: "example.com"           # Optional: SNI hostname to bind (leave "" to bind all HTTPS for site)
+    post_cmd: "iisreset /noforce"             # Optional: Additional command to run post-update
 
 # Global command executed ONCE after all certificate syncs finish (if at least 1 cert updated)
 global_post_cmd: "echo 'Global sync session completed successfully!'"

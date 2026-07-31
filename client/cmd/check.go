@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"cert-agent/internal/agent"
 	"cert-agent/internal/config"
 
 	"github.com/spf13/cobra"
@@ -53,9 +54,14 @@ var checkCmd = &cobra.Command{
 				Status:    "UNKNOWN",
 			}
 
-			// Read local certificate expiration
+			// Read local certificate expiration (Prioritize PfxFile if configured)
 			var localCertTime *time.Time
-			if cert.CertFile != "" {
+			if cert.PfxFile != "" && fileExists(cert.PfxFile) {
+				t, err := agent.GetPFXCertNotAfter(cert.PfxFile, cert.PfxPassword)
+				if err == nil && t != nil {
+					localCertTime = t
+				}
+			} else if cert.CertFile != "" && fileExists(cert.CertFile) {
 				certData, err := os.ReadFile(cert.CertFile)
 				if err == nil {
 					block, _ := pem.Decode(certData)
@@ -64,14 +70,17 @@ var checkCmd = &cobra.Command{
 						if err == nil {
 							t := parsedCert.NotAfter
 							localCertTime = &t
-							days := int(math.Ceil(t.Sub(now).Hours() / 24))
-							if days < 0 {
-								row.LocalExp = fmt.Sprintf("%s (EXPIRED)", t.Format("2006-01-02"))
-							} else {
-								row.LocalExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
-							}
 						}
 					}
+				}
+			}
+
+			if localCertTime != nil {
+				days := int(math.Ceil(localCertTime.Sub(now).Hours() / 24))
+				if days < 0 {
+					row.LocalExp = fmt.Sprintf("%s (EXPIRED)", localCertTime.Format("2006-01-02"))
+				} else {
+					row.LocalExp = fmt.Sprintf("%s (%dd)", localCertTime.Format("2006-01-02"), days)
 				}
 			}
 
@@ -85,7 +94,11 @@ var checkCmd = &cobra.Command{
 					body, _ := io.ReadAll(resp.Body)
 					resp.Body.Close()
 
-					if resp.StatusCode == http.StatusNotFound {
+					if resp.StatusCode == http.StatusUnauthorized {
+						row.Status = "INVALID TOKEN"
+					} else if resp.StatusCode == http.StatusForbidden {
+						row.Status = "FORBIDDEN"
+					} else if resp.StatusCode == http.StatusNotFound {
 						row.Status = "SERVER NOT FOUND"
 					} else if resp.StatusCode == http.StatusOK {
 						var meta ServerMetaResponse
@@ -110,7 +123,7 @@ var checkCmd = &cobra.Command{
 							}
 						}
 					} else {
-						row.Status = "SERVER ERR"
+						row.Status = fmt.Sprintf("HTTP %d", resp.StatusCode)
 					}
 				} else {
 					row.Status = "CONN ERR"

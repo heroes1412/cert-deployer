@@ -53,14 +53,14 @@ func BackupFile(filePath string) (string, error) {
 	return backupPath, nil
 }
 
-func WriteAtomicFile(targetPath string, content string, defaultMode os.FileMode) error {
+func WriteAtomicBytes(targetPath string, data []byte, defaultMode os.FileMode) error {
 	dir := filepath.Dir(targetPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
 	tmpFile := targetPath + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(content), defaultMode); err != nil {
+	if err := os.WriteFile(tmpFile, data, defaultMode); err != nil {
 		return fmt.Errorf("failed to write temporary file %s: %w", tmpFile, err)
 	}
 
@@ -70,6 +70,24 @@ func WriteAtomicFile(targetPath string, content string, defaultMode os.FileMode)
 	if err := os.Rename(tmpFile, targetPath); err != nil {
 		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to atomically rename %s to %s: %w", tmpFile, targetPath, err)
+	}
+
+	return nil
+}
+
+func WriteAtomicFile(targetPath string, content string, defaultMode os.FileMode) error {
+	return WriteAtomicBytes(targetPath, []byte(content), defaultMode)
+}
+
+func WritePFXFile(pfxFile string, pfxBytes []byte) error {
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+
+	if bak, err := BackupFile(pfxFile); err == nil && bak != "" {
+		fmt.Printf("[%s] [INFO] Created backup: %s -> %s\n", nowStr, pfxFile, bak)
+	}
+
+	if err := WriteAtomicBytes(pfxFile, pfxBytes, 0600); err != nil {
+		return fmt.Errorf("failed writing PFX file: %w", err)
 	}
 
 	return nil

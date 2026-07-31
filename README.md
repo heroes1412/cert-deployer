@@ -118,6 +118,9 @@ All Kubernetes manifests are provided under [`deploy/k8s/`](file:///C:/Users/Adm
 - Preserves existing file permissions (Mode) and ownership (UID/GID on Linux/Unix).
 - Strict file permission `0600` fallback for new private key files (`0644` for public certs).
 - Checks local file existence: skips syncing if local `certfile` or `keyfile` does not exist.
+- Native PKCS#12 (`.pfx`) generation in pure Go (triggered automatically by configuring `pfxfile` in `config.yaml`).
+- Automatic Windows Certificate Store (`Cert:\LocalMachine\My`) import and IIS Web Site HTTPS rebinding (`iis_site_name`, `iis_binding_host`).
+- Automatic parent directory creation (`os.MkdirAll`) for missing target certificate paths.
 - Special handling for combined cert files (e.g. HAProxy where `certfile == keyfile`).
 
 ### Build

@@ -14,6 +14,10 @@ type CertMapping struct {
 	ServercertName string `yaml:"servercert_name"`
 	CertFile       string `yaml:"certfile"`
 	KeyFile        string `yaml:"keyfile"`
+	PfxFile        string `yaml:"pfxfile"`
+	PfxPassword    string `yaml:"pfx_password"`
+	IISSiteName    string `yaml:"iis_site_name"`
+	IISBindingHost string `yaml:"iis_binding_host"`
 	PreCmd         string `yaml:"pre_cmd"`
 	PostCmd        string `yaml:"post_cmd"`
 }
@@ -89,8 +93,15 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 
 	for i := range cfg.Certs {
-		cfg.Certs[i].CertFile = filepath.Clean(cfg.Certs[i].CertFile)
-		cfg.Certs[i].KeyFile = filepath.Clean(cfg.Certs[i].KeyFile)
+		if cfg.Certs[i].CertFile != "" {
+			cfg.Certs[i].CertFile = filepath.Clean(cfg.Certs[i].CertFile)
+		}
+		if cfg.Certs[i].KeyFile != "" {
+			cfg.Certs[i].KeyFile = filepath.Clean(cfg.Certs[i].KeyFile)
+		}
+		if cfg.Certs[i].PfxFile != "" {
+			cfg.Certs[i].PfxFile = filepath.Clean(cfg.Certs[i].PfxFile)
+		}
 	}
 
 	return &cfg, nil
@@ -108,6 +119,12 @@ func (c *Config) ValidateTargetDirectories() error {
 			dir := filepath.Dir(cert.KeyFile)
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				return fmt.Errorf("target directory does not exist for keyfile %s: %s", cert.KeyFile, dir)
+			}
+		}
+		if cert.PfxFile != "" {
+			dir := filepath.Dir(cert.PfxFile)
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				return fmt.Errorf("target directory does not exist for pfxfile %s: %s", cert.PfxFile, dir)
 			}
 		}
 	}

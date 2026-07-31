@@ -11,6 +11,8 @@ Fix*
 fix*
 Fix*.txt
 fix*.txt
+log.txt
+*.png
 
 # Database & Storage
 *.db
@@ -18,6 +20,8 @@ fix*.txt
 *.pem
 *.crt
 *.key
+*.pfx
+*.bak
 
 # IDE & System
 .idea/

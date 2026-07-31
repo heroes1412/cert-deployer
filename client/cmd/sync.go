@@ -58,15 +58,13 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		// 1. Run global_pre_cmd
+		// 1. Run global_pre_cmd (If command or script file is missing/fails, log WARN and continue sync)
 		if cfg.GlobalPreCmd != "" {
 			logInfo("Running global_pre_cmd: %s", cfg.GlobalPreCmd)
 			out, err := agent.ExecuteCommand(cfg.GlobalPreCmd, 30*time.Second)
 			if err != nil {
-				logError("global_pre_cmd failed: %v. Aborting update!", err)
-				os.Exit(1)
-			}
-			if out != "" {
+				logWarn("global_pre_cmd failed or script not found: %v. Continuing sync...", err)
+			} else if out != "" {
 				logInfo("global_pre_cmd output: %s", out)
 			}
 		}
@@ -78,14 +76,17 @@ var syncCmd = &cobra.Command{
 		for _, cert := range cfg.Certs {
 			logInfo("Processing cert mapping: %s", cert.ServercertName)
 
-			// Check local file existence before attempting sync
-			if !fileExists(cert.CertFile) {
-				logWarn("Local certfile does not exist (%s) for %s. Skipping cert update.", cert.CertFile, cert.ServercertName)
-				continue
-			}
-			if cert.KeyFile != "" && cert.KeyFile != cert.CertFile && !fileExists(cert.KeyFile) {
-				logWarn("Local keyfile does not exist (%s) for %s. Skipping cert update.", cert.KeyFile, cert.ServercertName)
-				continue
+			// Check local file existence ONLY for standard PEM certs.
+			// For PFX (pfxfile), the file will be generated if missing.
+			if cert.PfxFile == "" {
+				if !fileExists(cert.CertFile) {
+					logWarn("Local certfile does not exist (%s) for %s. Skipping cert update.", cert.CertFile, cert.ServercertName)
+					continue
+				}
+				if cert.KeyFile != "" && cert.KeyFile != cert.CertFile && !fileExists(cert.KeyFile) {
+					logWarn("Local keyfile does not exist (%s) for %s. Skipping cert update.", cert.KeyFile, cert.ServercertName)
+					continue
+				}
 			}
 
 			// Per-cert pre_cmd
@@ -93,10 +94,8 @@ var syncCmd = &cobra.Command{
 				logInfo("Running per-cert pre_cmd for %s: %s", cert.ServercertName, cert.PreCmd)
 				out, err := agent.ExecuteCommand(cert.PreCmd, 30*time.Second)
 				if err != nil {
-					logError("Per-cert pre_cmd failed for %s: %v. Skipping cert update.", cert.ServercertName, err)
-					continue
-				}
-				if out != "" {
+					logWarn("Per-cert pre_cmd failed for %s: %v. Continuing...", cert.ServercertName, err)
+				} else if out != "" {
 					logInfo("Per-cert pre_cmd output for %s: %s", cert.ServercertName, out)
 				}
 			}
@@ -113,8 +112,12 @@ var syncCmd = &cobra.Command{
 			if err != nil || resp.StatusCode != http.StatusOK {
 				status := "CONN_ERR"
 				if resp != nil {
-					if resp.StatusCode == http.StatusNotFound {
-						status = "HTTP 404 (Not Found)"
+					if resp.StatusCode == http.StatusUnauthorized {
+						status = "HTTP 401 Unauthorized (Invalid or Revoked Auth Token)"
+					} else if resp.StatusCode == http.StatusForbidden {
+						status = "HTTP 403 Forbidden"
+					} else if resp.StatusCode == http.StatusNotFound {
+						status = "HTTP 404 Not Found (Certificate name not found on server)"
 					} else {
 						status = fmt.Sprintf("HTTP %d", resp.StatusCode)
 					}
@@ -133,19 +136,48 @@ var syncCmd = &cobra.Command{
 			}
 
 			// Check local SHA256 against server SHA256
-			localSHA, err := agent.ComputeFileSHA256(cert.CertFile)
+			var localSHA string
+			if cert.PfxFile != "" {
+				localSHA, err = agent.GetPFXCertSHA256(cert.PfxFile, cert.PfxPassword)
+			} else {
+				localSHA, err = agent.ComputeFileSHA256(cert.CertFile)
+			}
+
 			if err == nil && localSHA == certResp.SHA256 {
 				logInfo("Certificate %s is already up to date (SHA256: %s). Skipping download.", cert.ServercertName, localSHA[:16])
 				continue
 			}
 
 			logInfo("Certificate update detected for %s. Writing updated files...", cert.ServercertName)
-			if err := agent.WriteCertAndKey(cert.CertFile, cert.KeyFile, certResp.CertPEM, certResp.KeyPEM); err != nil {
-				logError("Failed to write cert/key files for %s: %v", cert.ServercertName, err)
-				continue
+
+			if cert.PfxFile != "" {
+				pfxBytes, err := agent.EncodePEMToPFX(certResp.CertPEM, certResp.KeyPEM, cert.PfxPassword)
+				if err != nil {
+					logError("Failed to generate PFX for %s: %v", cert.ServercertName, err)
+					continue
+				}
+
+				if err := agent.WritePFXFile(cert.PfxFile, pfxBytes); err != nil {
+					logError("Failed to write PFX file for %s: %v", cert.ServercertName, err)
+					continue
+				}
+
+				logInfo("Successfully updated PFX file for %s", cert.ServercertName)
+
+				if cert.IISSiteName != "" {
+					logInfo("Importing PFX to Windows Store and rebinding IIS site '%s'...", cert.IISSiteName)
+					if err := agent.ImportPFXAndRebindIIS(cert.PfxFile, cert.PfxPassword, cert.IISSiteName, cert.IISBindingHost); err != nil {
+						logError("Failed to import/rebind IIS for %s: %v", cert.ServercertName, err)
+					}
+				}
+			} else {
+				if err := agent.WriteCertAndKey(cert.CertFile, cert.KeyFile, certResp.CertPEM, certResp.KeyPEM); err != nil {
+					logError("Failed to write cert/key files for %s: %v", cert.ServercertName, err)
+					continue
+				}
+				logInfo("Successfully updated certificate files for %s", cert.ServercertName)
 			}
 
-			logInfo("Successfully updated certificate files for %s", cert.ServercertName)
 			updatedCount++
 
 			// Per-cert post_cmd
