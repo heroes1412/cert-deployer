@@ -3,7 +3,6 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"cert-server/internal/db"
 	"cert-server/internal/middleware"
 	"cert-server/internal/models"
+	"cert-server/internal/notifications"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,6 +35,15 @@ type CertViewModel struct {
 	IsExpired          bool
 	IsWarning          bool
 	UpdatedAtFormatted string
+	IsACME             bool
+	ACMEProvider       string
+	DNSProvider        string
+	DNSAPIToken        string
+	ACMEEmail          string
+	Domains            string
+	EABKID             string
+	EABHMACKey         string
+	AutoRenew          bool
 }
 
 type TokenViewModel struct {
@@ -96,12 +105,12 @@ func ShowDashboard(c *gin.Context) {
 	errMsg := c.Query("error")
 
 	var certs []models.Certificate
-	db.DB.Order("updated_at desc").Find(&certs)
+	db.DB.Order("created_at desc").Find(&certs)
 
 	now := time.Now()
 	var certVMs []CertViewModel
 	for _, cert := range certs {
-		daysLeft := int(math.Ceil(cert.NotAfter.Sub(now).Hours() / 24))
+		daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
 		shaShort := cert.FingerprintSHA256
 		if len(shaShort) > 16 {
 			shaShort = shaShort[:16] + "..."
@@ -120,6 +129,15 @@ func ShowDashboard(c *gin.Context) {
 			IsExpired:          isExpired,
 			IsWarning:          isWarning,
 			UpdatedAtFormatted: cert.UpdatedAt.Format("2006-01-02 15:04:05"),
+			IsACME:             cert.IsACME,
+			ACMEProvider:       cert.ACMEProvider,
+			DNSProvider:        cert.DNSProvider,
+			DNSAPIToken:        cert.DNSAPIToken,
+			ACMEEmail:          cert.ACMEEmail,
+			Domains:            cert.Domains,
+			EABKID:             cert.EABKID,
+			EABHMACKey:         cert.EABHMACKey,
+			AutoRenew:          cert.AutoRenew,
 		})
 	}
 
@@ -140,26 +158,34 @@ func ShowDashboard(c *gin.Context) {
 	serverPort := db.GetSetting("server_port", "8080")
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"certs":                  certVMs,
-		"tokens":                 tokenVMs,
-		"serverPort":             serverPort,
-		"msg":                    msg,
-		"error":                  errMsg,
-		"telegramBotToken":       db.GetSetting("telegram_bot_token", ""),
-		"telegramChatID":         db.GetSetting("telegram_chat_id", ""),
-		"slackWebhookURL":        db.GetSetting("slack_webhook_url", ""),
-		"emailSMTPHost":          db.GetSetting("email_smtp_host", ""),
-		"emailSMTPPort":          db.GetSetting("email_smtp_port", "587"),
-		"emailSMTPUser":          db.GetSetting("email_smtp_user", ""),
-		"emailSMTPPass":          db.GetSetting("email_smtp_pass", ""),
-		"emailRecipient":         db.GetSetting("email_recipient", ""),
-		"notifyDaysThresholds":   db.GetSetting("notify_days_thresholds", "7,14,30"),
-		"enableTelegram":         db.GetSetting("enable_telegram", "false") == "true",
-		"enableSlack":            db.GetSetting("enable_slack", "false") == "true",
-		"enableEmail":            db.GetSetting("enable_email", "false") == "true",
-		"customWebhookURL":       db.GetSetting("custom_webhook_url", ""),
-		"customWebhookSecret":    db.GetSetting("custom_webhook_secret", ""),
-		"enableWebhook":          db.GetSetting("enable_webhook", "false") == "true",
+		"certs":                    certVMs,
+		"tokens":                   tokenVMs,
+		"serverPort":               serverPort,
+		"msg":                      msg,
+		"error":                    errMsg,
+		"telegramBotToken":         db.GetSetting("telegram_bot_token", ""),
+		"telegramChatID":           db.GetSetting("telegram_chat_id", ""),
+		"slackWebhookURL":          db.GetSetting("slack_webhook_url", ""),
+		"emailSMTPHost":            db.GetSetting("email_smtp_host", ""),
+		"emailSMTPPort":            db.GetSetting("email_smtp_port", "587"),
+		"emailSMTPUser":            db.GetSetting("email_smtp_user", ""),
+		"emailSMTPPass":            db.GetSetting("email_smtp_pass", ""),
+		"emailRecipient":           db.GetSetting("email_recipient", ""),
+		"notifyWarningDays":        db.GetSetting("notify_warning_days", "15"),
+		"notifyCheckIntervalHours": db.GetSetting("notify_check_interval_hours", "12"),
+		"enableTelegram":           db.GetSetting("enable_telegram", "false") == "true",
+		"enableSlack":              db.GetSetting("enable_slack", "false") == "true",
+		"enableEmail":              db.GetSetting("enable_email", "false") == "true",
+		"customWebhookURL":         db.GetSetting("custom_webhook_url", ""),
+		"customWebhookSecret":      db.GetSetting("custom_webhook_secret", ""),
+		"enableWebhook":            db.GetSetting("enable_webhook", "false") == "true",
+		"enableProxy":              db.GetSetting("enable_proxy", "false") == "true",
+		"proxyProtocol":            db.GetSetting("proxy_protocol", "http"),
+		"proxyHost":                db.GetSetting("proxy_host", ""),
+		"proxyPort":                db.GetSetting("proxy_port", "8080"),
+		"enableProxyAuth":          db.GetSetting("enable_proxy_auth", "false") == "true",
+		"proxyUser":                db.GetSetting("proxy_user", ""),
+		"proxyPass":                db.GetSetting("proxy_pass", ""),
 	})
 }
 
@@ -201,7 +227,7 @@ func SaveCertificate(c *gin.Context) {
 func DeleteCertificate(c *gin.Context) {
 	name := c.PostForm("servercert_name")
 	db.DB.Where("servercert_name = ?", name).Delete(&models.Certificate{})
-	c.Redirect(http.StatusSeeOther, "/admin?msg=Certificate+deleted")
+	c.Redirect(http.StatusSeeOther, "/admin?msg=Certificate+deleted+successfully")
 }
 
 func GenerateAPIToken(c *gin.Context) {
@@ -242,14 +268,14 @@ func RevokeAPIToken(c *gin.Context) {
 }
 
 func SaveSettings(c *gin.Context) {
-	newPort := c.PostForm("server_port")
 	currentPass := c.PostForm("current_password")
 	newPass := c.PostForm("new_password")
 	confirmPass := c.PostForm("confirm_password")
+	newPort := c.PostForm("server_port")
 
-	msg := "Settings+saved+successfully!"
+	msg := "Settings+saved+successfully"
 
-	// 1. Handle Server Port Update
+	// 1. Handle Management Port Update
 	if newPort != "" {
 		portNum, err := strconv.Atoi(newPort)
 		if err != nil || portNum < 1 || portNum > 65535 {
@@ -263,7 +289,25 @@ func SaveSettings(c *gin.Context) {
 		}
 	}
 
-	// 2. Handle Notification Settings Update
+	// 2. Handle Proxy Settings Update
+	_ = db.SetSetting("proxy_protocol", c.PostForm("proxy_protocol"))
+	_ = db.SetSetting("proxy_host", c.PostForm("proxy_host"))
+	_ = db.SetSetting("proxy_port", c.PostForm("proxy_port"))
+	_ = db.SetSetting("proxy_user", c.PostForm("proxy_user"))
+	_ = db.SetSetting("proxy_pass", c.PostForm("proxy_pass"))
+
+	if c.PostForm("enable_proxy") == "on" || c.PostForm("enable_proxy") == "true" {
+		_ = db.SetSetting("enable_proxy", "true")
+	} else {
+		_ = db.SetSetting("enable_proxy", "false")
+	}
+	if c.PostForm("enable_proxy_auth") == "on" || c.PostForm("enable_proxy_auth") == "true" {
+		_ = db.SetSetting("enable_proxy_auth", "true")
+	} else {
+		_ = db.SetSetting("enable_proxy_auth", "false")
+	}
+
+	// 3. Handle Notification Settings Update
 	_ = db.SetSetting("telegram_bot_token", c.PostForm("telegram_bot_token"))
 	_ = db.SetSetting("telegram_chat_id", c.PostForm("telegram_chat_id"))
 	_ = db.SetSetting("slack_webhook_url", c.PostForm("slack_webhook_url"))
@@ -272,7 +316,8 @@ func SaveSettings(c *gin.Context) {
 	_ = db.SetSetting("email_smtp_user", c.PostForm("email_smtp_user"))
 	_ = db.SetSetting("email_smtp_pass", c.PostForm("email_smtp_pass"))
 	_ = db.SetSetting("email_recipient", c.PostForm("email_recipient"))
-	_ = db.SetSetting("notify_days_thresholds", c.PostForm("notify_days_thresholds"))
+	_ = db.SetSetting("notify_warning_days", c.PostForm("notify_warning_days"))
+	_ = db.SetSetting("notify_check_interval_hours", c.PostForm("notify_check_interval_hours"))
 
 	_ = db.SetSetting("custom_webhook_url", c.PostForm("custom_webhook_url"))
 	_ = db.SetSetting("custom_webhook_secret", c.PostForm("custom_webhook_secret"))
@@ -370,12 +415,22 @@ func IssueACMECertificate(c *gin.Context) {
 	}
 
 	// 3. Save directly into SQLite Database
+	domainsJoined := strings.Join(cleanedDomains, ", ")
 	var existing models.Certificate
 	if err := db.DB.Where("servercert_name = ?", name).First(&existing).Error; err == nil {
 		existing.CertData = res.CertPEM
 		existing.KeyData = res.KeyPEM
 		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
 		existing.NotAfter = certInfo.NotAfter
+		existing.IsACME = true
+		existing.ACMEProvider = acmeProvider
+		existing.DNSProvider = dnsProvider
+		existing.DNSAPIToken = dnsToken
+		existing.ACMEEmail = email
+		existing.Domains = domainsJoined
+		existing.EABKID = eabKid
+		existing.EABHMACKey = eabHmac
+		existing.AutoRenew = true
 		db.DB.Save(&existing)
 	} else {
 		newCert := models.Certificate{
@@ -384,9 +439,74 @@ func IssueACMECertificate(c *gin.Context) {
 			KeyData:           res.KeyPEM,
 			FingerprintSHA256: certInfo.FingerprintSHA256,
 			NotAfter:          certInfo.NotAfter,
+			IsACME:            true,
+			ACMEProvider:      acmeProvider,
+			DNSProvider:       dnsProvider,
+			DNSAPIToken:       dnsToken,
+			ACMEEmail:          email,
+			Domains:           domainsJoined,
+			EABKID:            eabKid,
+			EABHMACKey:        eabHmac,
+			AutoRenew:         true,
 		}
 		db.DB.Create(&newCert)
 	}
 
 	c.Redirect(http.StatusSeeOther, "/admin?msg=ACME+Certificate+successfully+issued+and+saved+for+"+name)
+}
+
+func CheckCertName(c *gin.Context) {
+	name := strings.TrimSpace(c.Query("name"))
+	if name == "" {
+		c.JSON(http.StatusOK, gin.H{"exists": false})
+		return
+	}
+	var existing models.Certificate
+	err := db.DB.Where("servercert_name = ?", name).First(&existing).Error
+	c.JSON(http.StatusOK, gin.H{"exists": err == nil})
+}
+
+func TestNotification(c *gin.Context) {
+	channel := c.PostForm("channel")
+	switch channel {
+	case "telegram":
+		token := c.PostForm("telegram_bot_token")
+		chatID := c.PostForm("telegram_chat_id")
+		err := notifications.TestTelegram(token, chatID)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	case "slack":
+		url := c.PostForm("slack_webhook_url")
+		err := notifications.TestSlack(url)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	case "webhook":
+		url := c.PostForm("custom_webhook_url")
+		secret := c.PostForm("custom_webhook_secret")
+		err := notifications.TestCustomWebhook(url, secret)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	case "email":
+		host := c.PostForm("email_smtp_host")
+		port := c.PostForm("email_smtp_port")
+		user := c.PostForm("email_smtp_user")
+		pass := c.PostForm("email_smtp_pass")
+		to := c.PostForm("email_recipient")
+		err := notifications.TestEmail(host, port, user, pass, to)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Unknown notification channel"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test notification sent successfully!"})
 }

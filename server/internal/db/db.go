@@ -1,7 +1,9 @@
 package db
 
 import (
+	"fmt"
 	"log"
+	"net/url"
 	"strings"
 
 	"cert-server/internal/models"
@@ -64,5 +66,35 @@ func SetSetting(key string, value string) error {
 		setting.Value = value
 		return DB.Save(&setting).Error
 	}
-	return DB.Create(&models.Setting{Key: key, Value: value}).Error
+	newSetting := models.Setting{Key: key, Value: value}
+	return DB.Create(&newSetting).Error
+}
+
+func GetConstructedProxyURL() string {
+	if GetSetting("enable_proxy", "false") != "true" {
+		return ""
+	}
+
+	proto := GetSetting("proxy_protocol", "http")
+	host := strings.TrimSpace(GetSetting("proxy_host", ""))
+	port := strings.TrimSpace(GetSetting("proxy_port", ""))
+	if host == "" {
+		return ""
+	}
+	if port == "" {
+		port = "8080"
+	}
+
+	enableAuth := GetSetting("enable_proxy_auth", "false") == "true"
+	user := strings.TrimSpace(GetSetting("proxy_user", ""))
+	pass := GetSetting("proxy_pass", "")
+
+	if enableAuth && user != "" {
+		if pass != "" {
+			return fmt.Sprintf("%s://%s:%s@%s:%s", proto, url.QueryEscape(user), url.QueryEscape(pass), host, port)
+		}
+		return fmt.Sprintf("%s://%s@%s:%s", proto, url.QueryEscape(user), host, port)
+	}
+
+	return fmt.Sprintf("%s://%s:%s", proto, host, port)
 }

@@ -4,9 +4,16 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
+	"time"
+
+	"cert-server/internal/db"
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -18,6 +25,45 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/route53"
 	"github.com/go-acme/lego/v4/registration"
 )
+
+type zeroSSLEABResponse struct {
+	Success    bool   `json:"success"`
+	EABKID     string `json:"eab_kid"`
+	EABHMACKey string `json:"eab_hmac_key"`
+	Error      struct {
+		Code int    `json:"code"`
+		Type string `json:"type"`
+	} `json:"error"`
+}
+
+func fetchZeroSSLEABFromAPIKey(apiKey string) (string, string, error) {
+	apiURL := fmt.Sprintf("https://api.zerossl.com/acme/eab-credentials?access_key=%s", url.QueryEscape(apiKey))
+	client := &http.Client{Timeout: 15 * time.Second}
+	if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
+		if proxyURL, err := url.Parse(proxyURLStr); err == nil {
+			client.Transport = &http.Transport{
+				Proxy: http.ProxyURL(proxyURL),
+			}
+		}
+	}
+
+	resp, err := client.Post(apiURL, "application/json", nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to call ZeroSSL API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var res zeroSSLEABResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", "", fmt.Errorf("failed to parse ZeroSSL EAB response: %w", err)
+	}
+
+	if !res.Success || res.EABKID == "" || res.EABHMACKey == "" {
+		return "", "", fmt.Errorf("ZeroSSL API returned error (code %d: %s)", res.Error.Code, res.Error.Type)
+	}
+
+	return res.EABKID, res.EABHMACKey, nil
+}
 
 const (
 	LetsEncryptProdURL    = "https://acme-v02.api.letsencrypt.org/directory"
@@ -69,6 +115,26 @@ func IssueCertificate(req ACMERequest) (*ACMEResult, error) {
 	config.CADirURL = cadir
 	config.Certificate.KeyType = certcrypto.RSA2048
 
+	// Configure HTTP/HTTPS/SOCKS5 Proxy if enabled
+	if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
+		proxyURL, err := url.Parse(proxyURLStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL '%s': %w", proxyURLStr, err)
+		}
+		customTransport := &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		}
+		config.HTTPClient = &http.Client{
+			Transport: customTransport,
+			Timeout:   60 * time.Second,
+		}
+		os.Setenv("HTTP_PROXY", proxyURLStr)
+		os.Setenv("HTTPS_PROXY", proxyURLStr)
+		os.Setenv("http_proxy", proxyURLStr)
+		os.Setenv("https_proxy", proxyURLStr)
+		log.Printf("[INFO] [ACME Issuer] Using HTTP/HTTPS Proxy: %s", proxyURLStr)
+	}
+
 	client, err := lego.NewClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create lego ACME client: %w", err)
@@ -110,18 +176,40 @@ func IssueCertificate(req ACMERequest) (*ACMEResult, error) {
 		return nil, fmt.Errorf("failed to set DNS-01 provider: %w", err)
 	}
 
-	// 4. Register ACME Account (Handle ZeroSSL EAB if applicable)
-	if req.ACMEProvider == "zerossl" && req.EABKID != "" && req.EABHMACKey != "" {
-		eabOpts := registration.RegisterEABOptions{
-			TermsOfServiceAgreed: true,
-			Kid:                  req.EABKID,
-			HmacEncoded:          req.EABHMACKey,
+	// 4. Register ACME Account (Handle ZeroSSL EAB / API Key if applicable)
+	if req.ACMEProvider == "zerossl" {
+		kid := strings.TrimSpace(req.EABKID)
+		hmacKey := strings.TrimSpace(req.EABHMACKey)
+
+		// If user entered ZeroSSL API Key in EABKID (or left HMACKey empty), fetch EAB KID & HMAC via API Key
+		if hmacKey == "" && kid != "" {
+			fetchedKID, fetchedHMAC, err := fetchZeroSSLEABFromAPIKey(kid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch ZeroSSL EAB credentials using API Key: %w", err)
+			}
+			kid = fetchedKID
+			hmacKey = fetchedHMAC
+			log.Printf("[INFO] [ACME Issuer] Successfully retrieved ZeroSSL EAB KID & HMAC Key using ZeroSSL API Key")
 		}
-		reg, err := client.Registration.RegisterWithExternalAccountBinding(eabOpts)
-		if err != nil {
-			return nil, fmt.Errorf("failed ZeroSSL EAB registration: %w", err)
+
+		if kid != "" && hmacKey != "" {
+			eabOpts := registration.RegisterEABOptions{
+				TermsOfServiceAgreed: true,
+				Kid:                  kid,
+				HmacEncoded:          hmacKey,
+			}
+			reg, err := client.Registration.RegisterWithExternalAccountBinding(eabOpts)
+			if err != nil {
+				return nil, fmt.Errorf("failed ZeroSSL EAB registration: %w", err)
+			}
+			user.Registration = reg
+		} else {
+			reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+			if err != nil {
+				return nil, fmt.Errorf("failed ACME account registration: %w", err)
+			}
+			user.Registration = reg
 		}
-		user.Registration = reg
 	} else {
 		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {

@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"cert-server/internal/acme"
 	"cert-server/internal/db"
 	"cert-server/internal/handlers"
 	"cert-server/internal/middleware"
+	"cert-server/internal/notifications"
 	"cert-server/templates"
 
 	"github.com/gin-gonic/gin"
@@ -52,6 +54,12 @@ func runServer() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// Start ACME Auto-Renew Background Scheduler
+	acme.StartAutoRenewScheduler()
+
+	// Start Automated Expiration Notification Background Scheduler
+	notifications.StartNotificationScheduler()
+
 	r := gin.Default()
 	_ = r.SetTrustedProxies(nil)
 
@@ -69,12 +77,14 @@ func runServer() {
 	admin.Use(handlers.WebAuthMiddleware())
 	{
 		admin.GET("", handlers.ShowDashboard)
+		admin.GET("/certs/check-name", handlers.CheckCertName)
 		admin.POST("/certs/save", handlers.SaveCertificate)
 		admin.POST("/certs/delete", handlers.DeleteCertificate)
 		admin.POST("/certs/acme/issue", handlers.IssueACMECertificate)
 		admin.POST("/tokens/generate", handlers.GenerateAPIToken)
 		admin.POST("/tokens/revoke", handlers.RevokeAPIToken)
 		admin.POST("/settings/save", handlers.SaveSettings)
+		admin.POST("/notifications/test", handlers.TestNotification)
 	}
 
 	// Redirect root to /admin

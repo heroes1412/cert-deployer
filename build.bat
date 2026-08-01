@@ -13,7 +13,7 @@ echo [1/4] Building Cert Server for Windows (build\windows\cert-server.exe)...
 cd server
 set GOOS=windows
 set GOARCH=amd64
-go build -o ..\build\windows\cert-server.exe .
+go build -mod=mod -ldflags="-s -w" -o ..\build\windows\cert-server.exe .
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to build server for Windows!
     cd ..
@@ -23,7 +23,7 @@ if %errorlevel% neq 0 (
 echo [2/4] Building Cert Server for Linux (build\linux\cert-server)...
 set GOOS=linux
 set GOARCH=amd64
-go build -o ..\build\linux\cert-server .
+go build -mod=mod -ldflags="-s -w" -o ..\build\linux\cert-server .
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to build server for Linux!
     cd ..
@@ -36,7 +36,7 @@ echo [3/4] Building Cert Agent for Windows (build\windows\cert-agent.exe)...
 cd client
 set GOOS=windows
 set GOARCH=amd64
-go build -o ..\build\windows\cert-agent.exe .
+go build -mod=mod -ldflags="-s -w" -o ..\build\windows\cert-agent.exe .
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to build client for Windows!
     cd ..
@@ -46,7 +46,7 @@ if %errorlevel% neq 0 (
 echo [4/4] Building Cert Agent for Linux (build\linux\cert-agent)...
 set GOOS=linux
 set GOARCH=amd64
-go build -o ..\build\linux\cert-agent .
+go build -mod=mod -ldflags="-s -w" -o ..\build\linux\cert-agent .
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to build client for Linux!
     cd ..
