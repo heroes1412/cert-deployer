@@ -12,7 +12,8 @@ fix*
 Fix*.txt
 fix*.txt
 log.txt
-*.png
+!screenshot/
+!screenshot/*
 
 # Database & Storage
 *.db
