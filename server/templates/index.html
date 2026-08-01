@@ -305,6 +305,7 @@
                     <thead class="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800">
                         <tr>
                             <th class="p-4">ServerCert Name</th>
+                            <th class="p-4">Domains / SANs</th>
                             <th class="p-4">SHA256 Fingerprint</th>
                             <th class="p-4">Expiration Date</th>
                             <th class="p-4">Status / Days Left</th>
@@ -319,6 +320,13 @@
                                 <button onclick="openEditModal(this)" data-name="{{ .Name }}" data-cert="{{ .CertData }}" data-key="{{ .KeyData }}" class="text-blue-400 hover:underline text-left">
                                     {{ .Name }}
                                 </button>
+                            </td>
+                            <td class="p-4 font-mono text-slate-300 text-xs">
+                                {{ if .Domains }}
+                                <span class="bg-slate-800 border border-slate-700/60 px-2 py-0.5 rounded text-emerald-400 font-semibold">{{ .Domains }}</span>
+                                {{ else }}
+                                <span class="text-slate-500 italic">N/A</span>
+                                {{ end }}
                             </td>
                             <td class="p-4 font-mono text-slate-400 text-[11px]">
                                 <div class="flex items-center gap-2">
@@ -372,7 +380,7 @@
                         </tr>
                         {{ else }}
                         <tr>
-                            <td colspan="6" class="p-6 text-center text-slate-500">No certificates uploaded yet.</td>
+                            <td colspan="7" class="p-6 text-center text-slate-500">No certificates uploaded yet.</td>
                         </tr>
                         {{ end }}
                     </tbody>

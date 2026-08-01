@@ -14,6 +14,7 @@ import (
 type CertInfo struct {
 	NotAfter          time.Time
 	FingerprintSHA256 string
+	Domains           string
 }
 
 func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
@@ -61,8 +62,26 @@ func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
 	hash := sha256.Sum256([]byte(certPEM))
 	fingerprint := hex.EncodeToString(hash[:])
 
+	// 4. Extract Subject CommonName and Subject Alternative Names (SANs)
+	domainMap := make(map[string]bool)
+	var domainsList []string
+	if cert.Subject.CommonName != "" {
+		cn := strings.TrimSpace(cert.Subject.CommonName)
+		domainMap[cn] = true
+		domainsList = append(domainsList, cn)
+	}
+	for _, san := range cert.DNSNames {
+		san = strings.TrimSpace(san)
+		if san != "" && !domainMap[san] {
+			domainMap[san] = true
+			domainsList = append(domainsList, san)
+		}
+	}
+	domainsStr := strings.Join(domainsList, ", ")
+
 	return &CertInfo{
 		NotAfter:          cert.NotAfter,
 		FingerprintSHA256: fingerprint,
+		Domains:           domainsStr,
 	}, nil
 }

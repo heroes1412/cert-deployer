@@ -17,12 +17,14 @@ type FullCertResponse struct {
 	KeyPEM         string `json:"key_pem"`
 	SHA256         string `json:"sha256"`
 	NotAfter       string `json:"not_after"`
+	Domains        string `json:"domains"`
 }
 
 type MetaCertResponse struct {
 	ServercertName string `json:"servercert_name"`
 	SHA256         string `json:"sha256"`
 	NotAfter       string `json:"not_after"`
+	Domains        string `json:"domains"`
 }
 
 func GetCertFull(c *gin.Context) {
@@ -41,6 +43,7 @@ func GetCertFull(c *gin.Context) {
 		KeyPEM:         cert.KeyData,
 		SHA256:         cert.FingerprintSHA256,
 		NotAfter:       cert.NotAfter.Format("2006-01-02T15:04:05Z"),
+		Domains:        cert.Domains,
 	})
 }
 
@@ -58,6 +61,7 @@ func GetCertMeta(c *gin.Context) {
 		ServercertName: cert.ServercertName,
 		SHA256:         cert.FingerprintSHA256,
 		NotAfter:       cert.NotAfter.Format("2006-01-02T15:04:05Z"),
+		Domains:        cert.Domains,
 	})
 }
 

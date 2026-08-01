@@ -301,6 +301,7 @@ func SaveCertificate(c *gin.Context) {
 		existing.KeyData = keyPEM
 		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
 		existing.NotAfter = certInfo.NotAfter
+		existing.Domains = certInfo.Domains
 		db.DB.Save(&existing)
 		db.LogAudit(c.ClientIP(), "Update Manual Cert", fmt.Sprintf("Updated manual certificate '%s'", name))
 	} else {
@@ -311,6 +312,7 @@ func SaveCertificate(c *gin.Context) {
 			KeyData:           keyPEM,
 			FingerprintSHA256: certInfo.FingerprintSHA256,
 			NotAfter:          certInfo.NotAfter,
+			Domains:           certInfo.Domains,
 		}
 		db.DB.Create(&newCert)
 		db.LogAudit(c.ClientIP(), "Create Manual Cert", fmt.Sprintf("Created manual certificate '%s'", name))

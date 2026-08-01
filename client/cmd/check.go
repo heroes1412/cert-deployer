@@ -21,6 +21,7 @@ type ServerMetaResponse struct {
 	ServercertName string `json:"servercert_name"`
 	SHA256         string `json:"sha256"`
 	NotAfter       string `json:"not_after"`
+	Domains        string `json:"domains"`
 	Error          string `json:"error"`
 }
 
@@ -34,24 +35,24 @@ var checkCmd = &cobra.Command{
 		}
 
 		type TableRow struct {
-			Name         string
-			ServerExp    string
-			LocalExp     string
-			Status       string
-			ServerSHA256 string
-			LocalSHA256  string
+			Name      string
+			Domains   string
+			ServerExp string
+			LocalExp  string
+			Status    string
 		}
 
-		var rows []TableRow
 		client := &http.Client{Timeout: 10 * time.Second}
 		now := time.Now()
+		var rows []TableRow
 
 		for _, cert := range cfg.Certs {
 			row := TableRow{
 				Name:      cert.ServercertName,
+				Domains:   "N/A",
 				ServerExp: "N/A",
 				LocalExp:  "N/A",
-				Status:    "UNKNOWN",
+				Status:    "PENDING",
 			}
 
 			// Read local certificate expiration (Prioritize PfxFile if configured)
@@ -103,6 +104,9 @@ var checkCmd = &cobra.Command{
 					} else if resp.StatusCode == http.StatusOK {
 						var meta ServerMetaResponse
 						if err := json.Unmarshal(body, &meta); err == nil && meta.NotAfter != "" {
+							if meta.Domains != "" {
+								row.Domains = meta.Domains
+							}
 							t, err := time.Parse("2006-01-02T15:04:05Z", meta.NotAfter)
 							if err == nil {
 								days := int(math.Ceil(t.Sub(now).Hours() / 24))
@@ -111,7 +115,6 @@ var checkCmd = &cobra.Command{
 								} else {
 									row.ServerExp = fmt.Sprintf("%s (%dd)", t.Format("2006-01-02"), days)
 								}
-								row.ServerSHA256 = meta.SHA256
 
 								if localCertTime == nil {
 									row.Status = "LOCAL NOT FOUND"
@@ -135,19 +138,20 @@ var checkCmd = &cobra.Command{
 			rows = append(rows, row)
 		}
 
-		// Print ASCII Table: SERVERCERT NAME | SERVER EXPIRATION | LOCAL EXPIRATION | STATUS
-		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
-		fmt.Println("| SERVERCERT NAME | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS           |")
-		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
+		// Print ASCII Table: SERVERCERT NAME | DOMAINS / SANS | SERVER EXPIRATION | LOCAL EXPIRATION | STATUS
+		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
+		fmt.Println("| SERVERCERT NAME | DOMAINS / SANS                | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS           |")
+		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
 		for _, r := range rows {
-			fmt.Printf("| %-15s | %-19s | %-19s | %-16s |\n",
+			fmt.Printf("| %-15s | %-29s | %-19s | %-19s | %-16s |\n",
 				truncateStr(r.Name, 15),
+				truncateStr(r.Domains, 29),
 				truncateStr(r.ServerExp, 19),
 				truncateStr(r.LocalExp, 19),
 				truncateStr(r.Status, 16),
 			)
 		}
-		fmt.Println("+-----------------+---------------------+---------------------+------------------+")
+		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
 
 		var certNames []string
 		for _, c := range cfg.Certs {

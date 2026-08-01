@@ -78,7 +78,10 @@ graph TD
      - **Bcrypt Password Hashing**: Passwords stored using bcrypt with automatic legacy plain-text migration.
      - **256-Bit Cryptographically Secure Sessions**: Uses `crypto/rand` random session tokens with `SameSite=Lax` and `HttpOnly` cookies.
      - **Dynamic Default Credentials Helper**: Automatically displays default login credentials (`admin / admin123`) on `/login` and auto-hides the banner once password is modified.
-   - **Embedded Management UI**: Single-binary deployment containing an embedded Tailwind CSS Web Admin UI for certificate uploading, manual CRT/KEY downloading, live duplicate name checking, password management, and API token generation.
+   - **Automatic Subject & SAN Domain Extraction**:
+  - Automatically parses X.509 certificate PEM content to extract Subject CommonName (CN) and Subject Alternative Names (SANs) for both ACME and manual certificate uploads.
+  - Displays a dedicated **`Domains / SANs`** column on the Web Admin dashboard table.
+  - Returns domain/SAN metadata in REST API responses (`GET /api/v1/certs/:name/meta`) and renders a dedicated **`DOMAINS / SANS`** column in the `cert-agent check` CLI terminal output.
 
 2. **Cert Agent (`/client`)**:
    - **Target Node Synchronization**: Independent Go CLI executable installed on target web servers (Nginx, HAProxy, Apache, IIS, etc.).
