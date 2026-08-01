@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"cert-server/internal/db"
 	"cert-server/internal/models"
@@ -57,4 +59,53 @@ func GetCertMeta(c *gin.Context) {
 		SHA256:         cert.FingerprintSHA256,
 		NotAfter:       cert.NotAfter.Format("2006-01-02T15:04:05Z"),
 	})
+}
+
+type AgentHeartbeatRequest struct {
+	Hostname    string   `json:"hostname"`
+	IPAddress   string   `json:"ip_address"`
+	OS          string   `json:"os"`
+	SyncedCerts []string `json:"synced_certs"`
+}
+
+func PostAgentHeartbeat(c *gin.Context) {
+	var req AgentHeartbeatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid heartbeat payload"})
+		return
+	}
+
+	hostname := strings.TrimSpace(req.Hostname)
+	if hostname == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hostname is required"})
+		return
+	}
+
+	ip := strings.TrimSpace(req.IPAddress)
+	if ip == "" {
+		ip = c.ClientIP()
+	}
+
+	syncedCertsStr := strings.Join(req.SyncedCerts, ", ")
+
+	var node models.AgentNode
+	err := db.DB.Where("hostname = ?", hostname).First(&node).Error
+	if err != nil {
+		node = models.AgentNode{
+			Hostname:    hostname,
+			IPAddress:   ip,
+			OSInfo:      req.OS,
+			SyncedCerts: syncedCertsStr,
+			LastSeenAt:  time.Now(),
+		}
+		db.DB.Create(&node)
+	} else {
+		node.IPAddress = ip
+		node.OSInfo = req.OS
+		node.SyncedCerts = syncedCertsStr
+		node.LastSeenAt = time.Now()
+		db.DB.Save(&node)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Heartbeat recorded"})
 }

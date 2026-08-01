@@ -23,3 +23,20 @@ type Certificate struct {
 	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
+
+type AuditLog struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	IPAddress string    `gorm:"type:text;not null" json:"ip_address"`
+	Action    string    `gorm:"type:text;not null" json:"action"`
+	Details   string    `gorm:"type:text" json:"details"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+type AgentNode struct {
+	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Hostname    string    `gorm:"type:text;uniqueIndex;not null" json:"hostname"`
+	IPAddress   string    `gorm:"type:text" json:"ip_address"`
+	OSInfo      string    `gorm:"type:text" json:"os_info"`
+	SyncedCerts string    `gorm:"type:text" json:"synced_certs"`
+	LastSeenAt  time.Time `gorm:"type:datetime" json:"last_seen_at"`
+}

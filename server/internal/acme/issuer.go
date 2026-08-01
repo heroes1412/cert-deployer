@@ -36,18 +36,26 @@ type zeroSSLEABResponse struct {
 	} `json:"error"`
 }
 
+var acmeSharedTransport = &http.Transport{
+	Proxy: func(req *http.Request) (*url.URL, error) {
+		if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
+			return url.Parse(proxyURLStr)
+		}
+		return nil, nil
+	},
+	MaxIdleConns:        50,
+	MaxIdleConnsPerHost: 5,
+	IdleConnTimeout:     90 * time.Second,
+}
+
+var acmeSharedHTTPClient = &http.Client{
+	Timeout:   15 * time.Second,
+	Transport: acmeSharedTransport,
+}
+
 func fetchZeroSSLEABFromAPIKey(apiKey string) (string, string, error) {
 	apiURL := fmt.Sprintf("https://api.zerossl.com/acme/eab-credentials?access_key=%s", url.QueryEscape(apiKey))
-	client := &http.Client{Timeout: 15 * time.Second}
-	if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
-		if proxyURL, err := url.Parse(proxyURLStr); err == nil {
-			client.Transport = &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			}
-		}
-	}
-
-	resp, err := client.Post(apiURL, "application/json", nil)
+	resp, err := acmeSharedHTTPClient.Post(apiURL, "application/json", nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to call ZeroSSL API: %w", err)
 	}

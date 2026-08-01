@@ -5,10 +5,12 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"cert-server/internal/models"
 
 	"github.com/glebarez/sqlite"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -32,24 +34,46 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		sqlDB.SetMaxIdleConns(5)
 	}
 
-	err = database.AutoMigrate(&models.Certificate{}, &models.APIToken{}, &models.Setting{})
+	err = database.AutoMigrate(&models.Certificate{}, &models.APIToken{}, &models.Setting{}, &models.AuditLog{}, &models.AgentNode{})
 	if err != nil {
 		return nil, err
 	}
 
-	// Seed default admin password if not exists
+	// Seed default admin password if not exists (bcrypt hashed)
 	var setting models.Setting
 	if err := database.Where("key = ?", "admin_password").First(&setting).Error; err != nil {
+		hashed, _ := HashPassword("admin123")
 		database.Create(&models.Setting{
 			Key:   "admin_password",
-			Value: "admin123",
+			Value: hashed,
 		})
-		log.Println("[INFO] Initialized default admin_password setting ('admin123')")
+		log.Println("[INFO] Initialized default admin_password setting (bcrypt hashed)")
 	}
 
 	DB = database
 	log.Println("[INFO] SQLite Database initialized at:", dbPath)
 	return database, nil
+}
+
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
+}
+
+func CheckPassword(providedPass, storedPassHash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(storedPassHash), []byte(providedPass))
+	if err == nil {
+		return true
+	}
+	// Fallback check for legacy plain-text password and auto-upgrade to bcrypt hash
+	if providedPass == storedPassHash {
+		if newHash, err := HashPassword(providedPass); err == nil {
+			_ = SetSetting("admin_password", newHash)
+			log.Println("[INFO] Automatically upgraded legacy plaintext admin password to bcrypt hash")
+		}
+		return true
+	}
+	return false
 }
 
 func GetSetting(key string, defaultValue string) string {
@@ -97,4 +121,53 @@ func GetConstructedProxyURL() string {
 	}
 
 	return fmt.Sprintf("%s://%s:%s", proto, host, port)
+}
+
+// StartDailyDatabaseMaintenance initializes a background scheduler that runs once every 24 hours
+// to truncate the SQLite WAL journal and perform VACUUM to defragment and optimize disk space.
+func StartDailyDatabaseMaintenance() {
+	go func() {
+		// Run initial maintenance 1 minute after server startup
+		time.Sleep(1 * time.Minute)
+		runDatabaseMaintenance()
+
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			runDatabaseMaintenance()
+		}
+	}()
+}
+
+func runDatabaseMaintenance() {
+	if DB == nil {
+		return
+	}
+	log.Println("[INFO] [DB Maintenance] Running daily SQLite WAL checkpoint & VACUUM...")
+	if err := DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+		log.Printf("[WARNING] [DB Maintenance] Failed to truncate WAL journal: %v", err)
+	}
+	if err := DB.Exec("VACUUM").Error; err != nil {
+		log.Printf("[WARNING] [DB Maintenance] Failed to execute VACUUM: %v", err)
+	} else {
+		log.Println("[SUCCESS] [DB Maintenance] SQLite database successfully vacuumed & optimized")
+	}
+}
+
+func LogAudit(ipAddress, action, details string) {
+	if DB == nil {
+		return
+	}
+	if ipAddress == "" {
+		ipAddress = "127.0.0.1"
+	}
+	entry := models.AuditLog{
+		IPAddress: ipAddress,
+		Action:    action,
+		Details:   details,
+	}
+	if err := DB.Create(&entry).Error; err != nil {
+		log.Printf("[WARNING] Failed to write audit log: %v", err)
+	}
 }

@@ -10,7 +10,7 @@ The **Cert Deployer** solution provides automated, secure, and centralized SSL/T
 graph TD
     subgraph WebAdmin["Web Admin & Security"]
         Admin["System Administrator"] -->|"HTTPS / Web UI"| ServerDashboard["Cert Server (Web Admin)"]
-        ServerDashboard -->|"SQLite WAL Mode"| DB[("cert-server.db")]
+        ServerDashboard -->|"SQLite WAL Mode"| DB[("data/cert-server.db")]
         ServerDashboard -->|"12h Ticker (Threshold <= 15d)"| ACMEScheduler["ACME Auto-Renew Scheduler"]
         ServerDashboard -->|"Configurable Interval (Hours)"| NotifyScheduler["Expiration Alert Scheduler"]
     end
@@ -38,14 +38,19 @@ graph TD
 ### Component Overview
 
 1. **Cert Server (`/server`)**:
-   - **Central Management Vault**: Stores certificate PEM bundles, private keys, SHA256 fingerprints, and expiration dates in a lightweight SQLite database (`cert-server.db`).
+   - **Central Management Vault**: Stores certificate PEM bundles, private keys, SHA256 fingerprints, and expiration dates in a lightweight SQLite database (`data/cert-server.db`).
    - **High-Concurrency Engine**: Configured with SQLite WAL (Write-Ahead Logging) Mode and 100% Read-Only API Token Authentication. Client sync requests perform pure non-blocking `SELECT` queries, supporting 500+ CCU without database lock contention.
    - **Automated ACME Certificate Engine**: Integrated Lego engine (`github.com/go-acme/lego/v4`) supporting 1-click SSL/TLS issuance & auto-renewal for **Let's Encrypt** (Production & Staging) and **ZeroSSL** (via 1-field ZeroSSL API Key or EAB KID & HMAC Key).
    - **Outbound Proxy Support**: Configurable HTTP, HTTPS, and SOCKS5 proxy support (Anonymous & Authenticated) for enterprise environments behind corporate firewalls.
    - **Automated Background Schedulers**:
      - **ACME Auto-Renew Ticker**: Scans every 12 hours and automatically renews ACME certificates expiring within 15 days.
      - **Expiration Alert Scheduler**: Scans at user-defined intervals (in hours) and triggers alerts when certificates reach the warning threshold (e.g. 15 days remaining).
+     - **Daily SQLite Maintenance Scheduler**: Runs every 24 hours to execute `PRAGMA wal_checkpoint(TRUNCATE)` and `VACUUM`, preventing WAL journal bloat, defragmenting database pages, and reclaiming disk space.
    - **Multi-Channel Alert System**: Sends notifications to **Telegram Bot**, **Slack Webhook**, **Custom Generic Webhook**, and **Email SMTP** with instant **`🧪 Send Test`** verification.
+   - **Enterprise Security & Authentication**:
+     - **Bcrypt Password Hashing**: Passwords stored using bcrypt with automatic legacy plain-text migration.
+     - **256-Bit Cryptographically Secure Sessions**: Uses `crypto/rand` random session tokens with `SameSite=Lax` and `HttpOnly` cookies.
+     - **Dynamic Default Credentials Helper**: Automatically displays default login credentials (`admin / admin123`) on `/login` and auto-hides the banner once password is modified.
    - **Embedded Management UI**: Single-binary deployment containing an embedded Tailwind CSS Web Admin UI for certificate uploading, manual CRT/KEY downloading, live duplicate name checking, password management, and API token generation.
 
 2. **Cert Agent (`/client`)**:
@@ -76,15 +81,23 @@ graph TD
   - User-configurable **`Expiration Warning Days Threshold`** (e.g. 15 days) and **`Notification Check Interval (Hours)`** (e.g. 12 hours).
   - Multi-channel support: **Telegram Bot**, **Slack Incoming Webhook**, **Custom Generic Webhook** (with secret header), and **Email SMTP**.
   - **Instant `🧪 Send Test` Button**: Realtime AJAX test notification directly from the modal without needing to save settings first.
-- **Manual vs ACME Certificate Separation**: Clear UX distinction (`+ Add ACME Cert` and `+ Add / Update Manual Cert`). Download buttons are hidden when adding new manual certs.
-- **Live Duplicate Name Checker**: AJAX validation on `blur` event preventing accidental certificate name conflicts.
-- SQLite Database storing certificate PEM contents, public key fingerprints (SHA256), and expiration dates (`not_after`).
-- Automatic X.509 certificate parsing and public/private key cryptographic consistency check prior to saving.
-- Download Cert (`.crt`) and Download Key (`.key`) buttons directly from the Web UI modal.
-- API Bearer Token generation and revocation with 1-click Copy Token button.
-- Clean 1-Token Card UI View & 100% Read-Only Token Authentication for high CCU performance.
-- Change Admin Password & Configurable HTTP Management Port via Web UI Settings Modal.
-- REST API protected by Bearer Token Authorization.
+- **Automated Daily SQLite Maintenance & VACUUM**:
+  - Ticker runs every 24 hours (and 1 minute post-startup) executing `PRAGMA wal_checkpoint(TRUNCATE)` and `VACUUM` to defragment SQLite storage and truncate WAL logs.
+- **Security & Authentication Hardening**:
+  - Bcrypt password hashing (`golang.org/x/crypto/bcrypt`) with automatic legacy plain-text migration.
+  - Cryptographically secure 256-bit random session token generation (`crypto/rand`) with `SameSite=Lax` & `HttpOnly` cookies.
+  - Dynamic Default Credential Helper banner (`admin / admin123`) on `/login` that automatically disappears upon initial password change.
+- **Dashboard Summary Stat Cards**: 3 top-level KPI metrics displaying Total Certificates, Expiring Soon (&le;15 days), and Active ACME Auto-Renew.
+- **Agent Nodes Registry & Sync History**:
+  - Light-weight `POST /api/v1/agent/heartbeat` endpoint for `cert-agent` nodes.
+  - Automatically records agent hostname, IP address, OS/arch, list of synced certificates, and last sync timestamp upon completion of `cert-agent check` or `cert-agent sync` runs.
+  - Serves as a historical registry of target web servers that have synced with Cert Server (without maintaining long-lived TCP/WebSocket connections).
+- **Security Audit Logs (Modal UI)**:
+  - Full activity log recording timestamp, client IP, action (`User Login`, `Create Manual Cert`, `Update Manual Cert`, `Issue ACME Cert`, `Delete Certificate`, `Generate API Token`, `Revoke API Token`, `Update Settings`), and event details.
+  - Accessible directly via the **`📋 Audit Logs`** button on the top navigation bar next to **`⚙️ Settings`**.
+- **Enhanced Edit Certificate Modal**:
+  - `📋 Copy Cert` and `📋 Copy Key` buttons alongside `💾 Download Cert` and `💾 Download Key` for fast clipboard copying (hidden during new manual cert creation).
+- **REST API protected by Bearer Token Authorization.**
 - Native Windows Service support (via Windows SCM) with automatic error logging to `cert-server.log`.
 - **Go 1.26+ Compatible**: Build scripts use `-ldflags="-s -w"` stripping debug symbols to produce optimized ~28MB binaries.
 
@@ -98,7 +111,7 @@ By default, the server runs on `http://localhost:8080` (Default credentials: Use
 
 Environment variables:
 - `PORT`: HTTP listener port (default `8080` or configured via Web UI Settings).
-- `DB_PATH`: SQLite database file path (default `data/cert-server.db` or `cert-server.db`).
+- `DB_PATH`: SQLite database file path (default `data/cert-server.db`).
 
 ---
 

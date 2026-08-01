@@ -16,16 +16,26 @@ import (
 	"cert-server/internal/models"
 )
 
-func getHTTPClientWithProxy() *http.Client {
-	client := &http.Client{Timeout: 15 * time.Second}
-	if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
-		if proxyURL, err := url.Parse(proxyURLStr); err == nil {
-			client.Transport = &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
+var (
+	sharedTransport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if proxyURLStr := db.GetConstructedProxyURL(); proxyURLStr != "" {
+				return url.Parse(proxyURLStr)
 			}
-		}
+			return nil, nil
+		},
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
 	}
-	return client
+	sharedHTTPClient = &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: sharedTransport,
+	}
+)
+
+func getHTTPClientWithProxy() *http.Client {
+	return sharedHTTPClient
 }
 
 // StartNotificationScheduler initializes the automated background scanner

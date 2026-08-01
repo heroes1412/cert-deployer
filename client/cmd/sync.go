@@ -205,6 +205,12 @@ var syncCmd = &cobra.Command{
 			}
 		}
 
+		var certNames []string
+		for _, c := range cfg.Certs {
+			certNames = append(certNames, c.ServercertName)
+		}
+		sendAgentHeartbeat(cfg.ServerURL, cfg.AuthToken, certNames)
+
 		return nil
 	},
 }

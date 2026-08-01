@@ -13,6 +13,16 @@
             <p class="text-slate-400 text-sm mt-1">Cert Deployer Management System</p>
         </div>
 
+        {{ if .isDefaultPass }}
+        <div class="bg-blue-500/10 border border-blue-500/30 text-blue-400 p-3 rounded-lg text-xs mb-6 flex items-start gap-2">
+            <span class="text-base">💡</span>
+            <div>
+                <span class="font-semibold text-blue-300">Default Credentials:</span><br>
+                Username: <code class="bg-blue-950 px-1 py-0.5 rounded text-slate-200 font-mono">admin</code> &nbsp;|&nbsp; Password: <code class="bg-blue-950 px-1 py-0.5 rounded text-slate-200 font-mono">admin123</code>
+            </div>
+        </div>
+        {{ end }}
+
         {{ if .error }}
         <div class="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm mb-6">
             {{ .error }}

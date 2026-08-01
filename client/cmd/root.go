@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"runtime"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -34,4 +39,46 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&ConfigFile, "config", "c", "config.yaml", "path to config.yaml")
+}
+
+type HeartbeatPayload struct {
+	Hostname    string   `json:"hostname"`
+	IPAddress   string   `json:"ip_address"`
+	OS          string   `json:"os"`
+	SyncedCerts []string `json:"synced_certs"`
+}
+
+func sendAgentHeartbeat(serverURL, authToken string, syncedCerts []string) {
+	if serverURL == "" || authToken == "" {
+		return
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown-host"
+	}
+	osInfo := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+
+	payload := HeartbeatPayload{
+		Hostname:    hostname,
+		OS:          osInfo,
+		SyncedCerts: syncedCerts,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	reqURL := fmt.Sprintf("%s/api/v1/agent/heartbeat", serverURL)
+	req, err := http.NewRequest("POST", reqURL, bytes.NewBuffer(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+	}
 }

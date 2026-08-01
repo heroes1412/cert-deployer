@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ import (
 const (
 	AdminUser         = "admin"
 	DefaultAdminPass  = "admin123"
-	SessionCookieName = "cert_vault_session"
+	SessionCookieName = "cert_server_session"
 )
 
 type CertViewModel struct {
@@ -54,6 +55,24 @@ type TokenViewModel struct {
 	CreatedAtFormatted string
 }
 
+type AuditLogViewModel struct {
+	ID                 uint
+	IPAddress          string
+	Action             string
+	Details            string
+	CreatedAtFormatted string
+}
+
+type AgentNodeViewModel struct {
+	ID                uint
+	Hostname          string
+	IPAddress         string
+	OSInfo            string
+	SyncedCerts       string
+	LastSeenFormatted string
+	IsOnline          bool
+}
+
 func maskToken(token string) string {
 	token = strings.TrimSpace(token)
 	if len(token) <= 10 {
@@ -62,28 +81,46 @@ func maskToken(token string) string {
 	return token[:5] + "..." + token[len(token)-5:]
 }
 
+func generateSessionToken() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func ShowLogin(c *gin.Context) {
-	c.HTML(http.StatusOK, "login.html", gin.H{})
+	currentPassHash := db.GetSetting("admin_password", "")
+	isDefaultPass := db.CheckPassword(DefaultAdminPass, currentPassHash)
+	c.HTML(http.StatusOK, "login.html", gin.H{
+		"isDefaultPass": isDefaultPass,
+	})
 }
 
 func ProcessLogin(c *gin.Context) {
 	user := c.PostForm("username")
 	pass := c.PostForm("password")
 
-	currentPass := db.GetSetting("admin_password", DefaultAdminPass)
+	currentPassHash := db.GetSetting("admin_password", "")
 
-	if user == AdminUser && pass == currentPass {
-		c.SetCookie(SessionCookieName, "valid_session", 3600*24, "/", "", false, true)
+	if user == AdminUser && db.CheckPassword(pass, currentPassHash) {
+		sessionToken := generateSessionToken()
+		_ = db.SetSetting("active_session_token", sessionToken)
+		c.SetSameSite(http.SameSiteLaxMode)
+		c.SetCookie(SessionCookieName, sessionToken, 3600*24*365, "/", "", false, true)
+		db.LogAudit(c.ClientIP(), "User Login", "Administrator signed in successfully")
 		c.Redirect(http.StatusSeeOther, "/admin")
 		return
 	}
 
+	isDefaultPass := db.CheckPassword(DefaultAdminPass, currentPassHash)
 	c.HTML(http.StatusUnauthorized, "login.html", gin.H{
-		"error": "Invalid username or password",
+		"error":         "Invalid username or password",
+		"isDefaultPass": isDefaultPass,
 	})
 }
 
 func Logout(c *gin.Context) {
+	_ = db.SetSetting("active_session_token", "")
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(SessionCookieName, "", -1, "/", "", false, true)
 	c.Redirect(http.StatusSeeOther, "/login")
 }
@@ -91,7 +128,11 @@ func Logout(c *gin.Context) {
 func WebAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie(SessionCookieName)
-		if err != nil || cookie != "valid_session" {
+		activeToken := db.GetSetting("active_session_token", "")
+
+		if err != nil || cookie == "" || activeToken == "" || cookie != activeToken {
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie(SessionCookieName, "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
@@ -109,8 +150,18 @@ func ShowDashboard(c *gin.Context) {
 
 	now := time.Now()
 	var certVMs []CertViewModel
+	expiringSoonCerts := 0
+	activeACMECerts := 0
+
 	for _, cert := range certs {
 		daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
+		if daysLeft <= 15 {
+			expiringSoonCerts++
+		}
+		if cert.IsACME && cert.AutoRenew {
+			activeACMECerts++
+		}
+
 		shaShort := cert.FingerprintSHA256
 		if len(shaShort) > 16 {
 			shaShort = shaShort[:16] + "..."
@@ -155,11 +206,47 @@ func ShowDashboard(c *gin.Context) {
 		})
 	}
 
+	// Fetch Audit Logs (latest 50)
+	var rawAuditLogs []models.AuditLog
+	db.DB.Order("created_at desc").Limit(50).Find(&rawAuditLogs)
+	var auditLogVMs []AuditLogViewModel
+	for _, log := range rawAuditLogs {
+		auditLogVMs = append(auditLogVMs, AuditLogViewModel{
+			ID:                 log.ID,
+			IPAddress:          log.IPAddress,
+			Action:             log.Action,
+			Details:            log.Details,
+			CreatedAtFormatted: log.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	// Fetch Agent Nodes
+	var rawAgentNodes []models.AgentNode
+	db.DB.Order("last_seen_at desc").Find(&rawAgentNodes)
+	var agentNodeVMs []AgentNodeViewModel
+	for _, node := range rawAgentNodes {
+		isOnline := time.Since(node.LastSeenAt) < 24*time.Hour
+		agentNodeVMs = append(agentNodeVMs, AgentNodeViewModel{
+			ID:                node.ID,
+			Hostname:          node.Hostname,
+			IPAddress:         node.IPAddress,
+			OSInfo:            node.OSInfo,
+			SyncedCerts:       node.SyncedCerts,
+			LastSeenFormatted: node.LastSeenAt.Format("2006-01-02 15:04:05"),
+			IsOnline:          isOnline,
+		})
+	}
+
 	serverPort := db.GetSetting("server_port", "8080")
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
+		"totalCerts":               len(certs),
+		"expiringSoonCerts":        expiringSoonCerts,
+		"activeACMECerts":           activeACMECerts,
 		"certs":                    certVMs,
 		"tokens":                   tokenVMs,
+		"auditLogs":                auditLogVMs,
+		"agentNodes":               agentNodeVMs,
 		"serverPort":               serverPort,
 		"msg":                      msg,
 		"error":                    errMsg,
@@ -209,6 +296,7 @@ func SaveCertificate(c *gin.Context) {
 		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
 		existing.NotAfter = certInfo.NotAfter
 		db.DB.Save(&existing)
+		db.LogAudit(c.ClientIP(), "Update Manual Cert", fmt.Sprintf("Updated manual certificate '%s'", name))
 	} else {
 		// Create new
 		newCert := models.Certificate{
@@ -219,6 +307,7 @@ func SaveCertificate(c *gin.Context) {
 			NotAfter:          certInfo.NotAfter,
 		}
 		db.DB.Create(&newCert)
+		db.LogAudit(c.ClientIP(), "Create Manual Cert", fmt.Sprintf("Created manual certificate '%s'", name))
 	}
 
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Certificate+saved+successfully")
@@ -227,6 +316,7 @@ func SaveCertificate(c *gin.Context) {
 func DeleteCertificate(c *gin.Context) {
 	name := c.PostForm("servercert_name")
 	db.DB.Where("servercert_name = ?", name).Delete(&models.Certificate{})
+	db.LogAudit(c.ClientIP(), "Delete Certificate", fmt.Sprintf("Deleted certificate '%s'", name))
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Certificate+deleted+successfully")
 }
 
@@ -256,6 +346,7 @@ func GenerateAPIToken(c *gin.Context) {
 		Description: desc,
 	}
 	db.DB.Create(&newToken)
+	db.LogAudit(c.ClientIP(), "Generate API Token", fmt.Sprintf("Generated new API bearer token '%s'", desc))
 
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+generated+successfully")
 }
@@ -264,6 +355,7 @@ func RevokeAPIToken(c *gin.Context) {
 	idStr := c.PostForm("token_id")
 	id, _ := strconv.Atoi(idStr)
 	db.DB.Delete(&models.APIToken{}, id)
+	db.LogAudit(c.ClientIP(), "Revoke API Token", fmt.Sprintf("Revoked API bearer token ID %d", id))
 	c.Redirect(http.StatusSeeOther, "/admin?msg=Token+revoked")
 }
 
@@ -345,8 +437,8 @@ func SaveSettings(c *gin.Context) {
 
 	// 3. Handle Password Change if requested
 	if currentPass != "" || newPass != "" {
-		dbPass := db.GetSetting("admin_password", DefaultAdminPass)
-		if currentPass != dbPass {
+		dbPassHash := db.GetSetting("admin_password", "")
+		if !db.CheckPassword(currentPass, dbPassHash) {
 			c.Redirect(http.StatusSeeOther, "/admin?error=Current+password+is+incorrect")
 			return
 		}
@@ -356,12 +448,14 @@ func SaveSettings(c *gin.Context) {
 			return
 		}
 
-		if err := db.SetSetting("admin_password", newPass); err != nil {
+		hashedNewPass, err := db.HashPassword(newPass)
+		if err != nil || db.SetSetting("admin_password", hashedNewPass) != nil {
 			c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+update+password")
 			return
 		}
 	}
 
+	db.LogAudit(c.ClientIP(), "Update Settings", "Updated system settings (Proxy, Notifications, or Password)")
 	c.Redirect(http.StatusSeeOther, "/admin?msg="+msg)
 }
 
@@ -452,6 +546,7 @@ func IssueACMECertificate(c *gin.Context) {
 		db.DB.Create(&newCert)
 	}
 
+	db.LogAudit(c.ClientIP(), "Issue ACME Cert", fmt.Sprintf("Successfully issued ACME certificate '%s' via %s", name, acmeProvider))
 	c.Redirect(http.StatusSeeOther, "/admin?msg=ACME+Certificate+successfully+issued+and+saved+for+"+name)
 }
 

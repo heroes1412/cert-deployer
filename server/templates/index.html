@@ -7,7 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         function copyToClipboard(text, btnElement) {
-            navigator.clipboard.writeText(text).then(() => {
+            if (!text) {
+                alert("Content is empty!");
+                return;
+            }
+            function showSuccess() {
+                if (!btnElement) return;
                 const originalText = btnElement.innerText;
                 btnElement.innerText = "Copied!";
                 btnElement.classList.add("text-emerald-400");
@@ -15,9 +20,35 @@
                     btnElement.innerText = originalText;
                     btnElement.classList.remove("text-emerald-400");
                 }, 1500);
-            }).catch(err => {
-                alert("Failed to copy: " + err);
-            });
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(showSuccess).catch(() => fallbackCopy(text, showSuccess));
+            } else {
+                fallbackCopy(text, showSuccess);
+            }
+        }
+
+        function fallbackCopy(text, callback) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    callback();
+                } else {
+                    alert("Copy failed using browser fallback.");
+                }
+            } catch (err) {
+                alert("Copy failed: " + err);
+            }
+            document.body.removeChild(textArea);
         }
 
         function handleFileUpload(fileInput, targetTextareaId) {
@@ -58,8 +89,12 @@
 
             const cBtn = document.getElementById('certDownloadBtn');
             const kBtn = document.getElementById('keyDownloadBtn');
+            const cCopy = document.getElementById('certCopyBtn');
+            const kCopy = document.getElementById('keyCopyBtn');
             if (cBtn) cBtn.classList.add('hidden');
             if (kBtn) kBtn.classList.add('hidden');
+            if (cCopy) cCopy.classList.add('hidden');
+            if (kCopy) kCopy.classList.add('hidden');
 
             const statusEl = document.getElementById('certNameStatus');
             if (statusEl) statusEl.innerHTML = '';
@@ -82,8 +117,12 @@
 
             const cBtn = document.getElementById('certDownloadBtn');
             const kBtn = document.getElementById('keyDownloadBtn');
+            const cCopy = document.getElementById('certCopyBtn');
+            const kCopy = document.getElementById('keyCopyBtn');
             if (cBtn) cBtn.classList.remove('hidden');
             if (kBtn) kBtn.classList.remove('hidden');
+            if (cCopy) cCopy.classList.remove('hidden');
+            if (kCopy) kCopy.classList.remove('hidden');
 
             const statusEl = document.getElementById('certNameStatus');
             if (statusEl) statusEl.innerHTML = '';
@@ -188,6 +227,9 @@
             <span class="bg-blue-500/10 text-blue-400 text-xs px-2.5 py-0.5 rounded-full border border-blue-500/20">Cert Deployer</span>
         </div>
         <div class="flex items-center gap-3">
+            <button onclick="document.getElementById('auditModal').classList.remove('hidden')" class="text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-md transition border border-slate-700 flex items-center gap-1.5">
+                📋 Audit Logs
+            </button>
             <button onclick="document.getElementById('settingsModal').classList.remove('hidden')" class="text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-md transition border border-slate-700 flex items-center gap-1.5">
                 ⚙️ Settings
             </button>
@@ -208,6 +250,31 @@
             <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-200 font-bold">&times;</button>
         </div>
         {{ end }}
+
+        <!-- Summary Stat Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">
+                <div class="p-3 bg-blue-500/10 text-blue-400 rounded-lg text-xl">📜</div>
+                <div>
+                    <div class="text-2xl font-bold text-slate-100">{{ .totalCerts }}</div>
+                    <div class="text-xs font-medium text-slate-400">Total Certificates</div>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">
+                <div class="p-3 bg-amber-500/10 text-amber-400 rounded-lg text-xl">⚠️</div>
+                <div>
+                    <div class="text-2xl font-bold text-amber-400">{{ .expiringSoonCerts }}</div>
+                    <div class="text-xs font-medium text-slate-400">Expiring Soon (&le;15d)</div>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">
+                <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg text-xl">🤖</div>
+                <div>
+                    <div class="text-2xl font-bold text-emerald-400">{{ .activeACMECerts }}</div>
+                    <div class="text-xs font-medium text-slate-400">Active ACME Auto-Renew</div>
+                </div>
+            </div>
+        </div>
 
         <!-- Certificates Section -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
@@ -352,6 +419,91 @@
                 {{ end }}
             </div>
         </div>
+
+        <!-- Registered Agent Nodes / Sync History -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+            <div class="p-6 border-b border-slate-800">
+                <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">🖥️ Registered Agent Nodes</h2>
+                <p class="text-xs text-slate-400 mt-1">Historical registry of target web servers that have synced with Cert Server</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                        <tr>
+                            <th class="p-4">Hostname</th>
+                            <th class="p-4">IP Address</th>
+                            <th class="p-4">OS / Arch</th>
+                            <th class="p-4">Synced Certificates</th>
+                            <th class="p-4">Last Sync Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/50">
+                        {{ range .agentNodes }}
+                        <tr class="hover:bg-slate-800/30 transition">
+                            <td class="p-4 font-mono font-semibold text-blue-400">{{ .Hostname }}</td>
+                            <td class="p-4 font-mono text-slate-400">{{ .IPAddress }}</td>
+                            <td class="p-4 text-slate-400">{{ .OSInfo }}</td>
+                            <td class="p-4 font-mono text-slate-300">{{ if .SyncedCerts }}{{ .SyncedCerts }}{{ else }}None{{ end }}</td>
+                            <td class="p-4">
+                                <span class="bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold inline-block">
+                                    {{ .LastSeenFormatted }}
+                                </span>
+                            </td>
+                        </tr>
+                        {{ else }}
+                        <tr>
+                            <td colspan="5" class="p-6 text-center text-slate-500 italic">No agent nodes registered yet. Run 'cert-agent sync' on target servers to connect.</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        </div>
+    </div>
+
+    <!-- System Audit Logs Modal -->
+    <div id="auditModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-4xl shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4 shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">📋 System Audit Logs</h3>
+                    <p class="text-xs text-slate-400 mt-1">Security activity trail of administrative actions</p>
+                </div>
+                <button onclick="document.getElementById('auditModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+            
+            <div class="overflow-y-auto flex-1 border border-slate-800 rounded-lg">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800 sticky top-0">
+                        <tr>
+                            <th class="p-4">Timestamp</th>
+                            <th class="p-4">Client IP</th>
+                            <th class="p-4">Action</th>
+                            <th class="p-4">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/50">
+                        {{ range .auditLogs }}
+                        <tr class="hover:bg-slate-800/30 transition">
+                            <td class="p-4 text-slate-400 whitespace-nowrap font-mono">{{ .CreatedAtFormatted }}</td>
+                            <td class="p-4 font-mono text-slate-400 whitespace-nowrap">{{ .IPAddress }}</td>
+                            <td class="p-4 font-semibold text-blue-400 whitespace-nowrap">{{ .Action }}</td>
+                            <td class="p-4 text-slate-300">{{ .Details }}</td>
+                        </tr>
+                        {{ else }}
+                        <tr>
+                            <td colspan="4" class="p-6 text-center text-slate-500 italic">No audit log entries recorded yet.</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-end pt-2 border-t border-slate-800 shrink-0">
+                <button type="button" onclick="document.getElementById('auditModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Close</button>
+            </div>
+        </div>
     </div>
 
     <!-- Add/Edit Certificate Modal -->
@@ -374,6 +526,9 @@
                     <div class="flex justify-between items-center mb-1">
                         <label class="block text-xs font-semibold text-slate-400">Certificate PEM (cert_data)</label>
                         <div class="flex items-center gap-2">
+                            <button type="button" id="certCopyBtn" onclick="copyToClipboard(document.getElementById('cert_data').value, this)" class="hidden text-[11px] bg-slate-800 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                📋 Copy Cert
+                            </button>
                             <button type="button" id="certDownloadBtn" onclick="downloadCertFile('cert', 'cert_data', '.crt')" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
                                 💾 Download Cert
                             </button>
@@ -390,6 +545,9 @@
                     <div class="flex justify-between items-center mb-1">
                         <label class="block text-xs font-semibold text-slate-400">Private Key PEM (key_data)</label>
                         <div class="flex items-center gap-2">
+                            <button type="button" id="keyCopyBtn" onclick="copyToClipboard(document.getElementById('key_data').value, this)" class="hidden text-[11px] bg-slate-800 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
+                                📋 Copy Key
+                            </button>
                             <button type="button" id="keyDownloadBtn" onclick="downloadCertFile('key', 'key_data', '.key')" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2.5 py-1 rounded cursor-pointer border border-slate-700 transition">
                                 💾 Download Key
                             </button>

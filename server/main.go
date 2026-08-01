@@ -39,14 +39,8 @@ func initEnvironment() {
 func runServer() {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		if _, err := os.Stat("cert-server.db"); err == nil {
-			dbPath = "cert-server.db"
-		} else if _, err := os.Stat("cert-vault.db"); err == nil {
-			dbPath = "cert-vault.db"
-		} else {
-			_ = os.MkdirAll("data", 0755)
-			dbPath = filepath.Join("data", "cert-server.db")
-		}
+		_ = os.MkdirAll("data", 0755)
+		dbPath = filepath.Join("data", "cert-server.db")
 	}
 
 	_, err := db.InitDB(dbPath)
@@ -59,6 +53,9 @@ func runServer() {
 
 	// Start Automated Expiration Notification Background Scheduler
 	notifications.StartNotificationScheduler()
+
+	// Start Daily SQLite Database Maintenance & VACUUM Scheduler
+	db.StartDailyDatabaseMaintenance()
 
 	r := gin.Default()
 	_ = r.SetTrustedProxies(nil)
@@ -98,6 +95,7 @@ func runServer() {
 	{
 		api.GET("/certs/:servercert_name", handlers.GetCertFull)
 		api.GET("/certs/:servercert_name/meta", handlers.GetCertMeta)
+		api.POST("/agent/heartbeat", handlers.PostAgentHeartbeat)
 	}
 
 	port := os.Getenv("PORT")
