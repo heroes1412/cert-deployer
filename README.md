@@ -11,6 +11,13 @@ graph TD
     subgraph WebAdmin["Web Admin & Security"]
         Admin["System Administrator"] -->|"HTTPS / Web UI"| ServerDashboard["Cert Server (Web Admin)"]
         ServerDashboard -->|"SQLite WAL Mode"| DB[("cert-server.db")]
+        ServerDashboard -->|"12h Ticker (Threshold <= 15d)"| ACMEScheduler["ACME Auto-Renew Scheduler"]
+        ServerDashboard -->|"Configurable Interval (Hours)"| NotifyScheduler["Expiration Alert Scheduler"]
+    end
+
+    subgraph ExternalServices["External APIs & Proxies"]
+        ACMEScheduler -->|"Outbound HTTP/HTTPS/SOCKS5 Proxy"| ACMECA["Let's Encrypt / ZeroSSL (DNS-01)"]
+        NotifyScheduler -->|"Telegram / Slack / Webhook / Email"| Channels["Notification Channels"]
     end
 
     subgraph Clients["Enterprise Infrastructure (500+ Nodes)"]
@@ -33,8 +40,13 @@ graph TD
 1. **Cert Server (`/server`)**:
    - **Central Management Vault**: Stores certificate PEM bundles, private keys, SHA256 fingerprints, and expiration dates in a lightweight SQLite database (`cert-server.db`).
    - **High-Concurrency Engine**: Configured with SQLite WAL (Write-Ahead Logging) Mode and 100% Read-Only API Token Authentication. Client sync requests perform pure non-blocking `SELECT` queries, supporting 500+ CCU without database lock contention.
-   - **Embedded Management UI**: Single-binary deployment containing an embedded Tailwind CSS Web Admin UI for certificate uploading, manual CRT/KEY downloading, password management, and API token generation.
-   - **Cross-Platform Host Runtime**: Native Windows SCM Service integration (`sc.exe`), Linux `systemd` unit files, multi-stage Docker container (`~15MB`), and Kubernetes manifests (`deploy/k8s/`).
+   - **Automated ACME Certificate Engine**: Integrated Lego engine (`github.com/go-acme/lego/v4`) supporting 1-click SSL/TLS issuance & auto-renewal for **Let's Encrypt** (Production & Staging) and **ZeroSSL** (via 1-field ZeroSSL API Key or EAB KID & HMAC Key).
+   - **Outbound Proxy Support**: Configurable HTTP, HTTPS, and SOCKS5 proxy support (Anonymous & Authenticated) for enterprise environments behind corporate firewalls.
+   - **Automated Background Schedulers**:
+     - **ACME Auto-Renew Ticker**: Scans every 12 hours and automatically renews ACME certificates expiring within 15 days.
+     - **Expiration Alert Scheduler**: Scans at user-defined intervals (in hours) and triggers alerts when certificates reach the warning threshold (e.g. 15 days remaining).
+   - **Multi-Channel Alert System**: Sends notifications to **Telegram Bot**, **Slack Webhook**, **Custom Generic Webhook**, and **Email SMTP** with instant **`🧪 Send Test`** verification.
+   - **Embedded Management UI**: Single-binary deployment containing an embedded Tailwind CSS Web Admin UI for certificate uploading, manual CRT/KEY downloading, live duplicate name checking, password management, and API token generation.
 
 2. **Cert Agent (`/client`)**:
    - **Target Node Synchronization**: Independent Go CLI executable installed on target web servers (Nginx, HAProxy, Apache, IIS, etc.).
@@ -51,9 +63,21 @@ graph TD
 
 ### Features
 - Embedded Web Admin UI (built with Go `embed.FS` and Tailwind CSS).
-- **Automated ACME Certificate Engine**: Integrated Lego engine (`github.com/go-acme/lego/v4`) supporting 1-click SSL/TLS issuance for **Let's Encrypt** (Production & Staging) and **ZeroSSL** (with EAB credentials).
-- **DNS-01 Challenge Validation**: Native DNS-01 automation for **Cloudflare**, **DigitalOcean**, **AWS Route53**, and **GoDaddy** (no public IP or NAT Port 80/443 required on internal networks).
-- **Multi-Channel Alert Notifications**: Configurable sub-tab in Web Settings for **Telegram Bot**, **Slack Webhook**, **Custom Generic Webhook**, and **Email SMTP** with configurable threshold days (7, 14, 30 days).
+- **Automated ACME Certificate Engine**:
+  - Supports **Let's Encrypt** (Production & Staging) and **ZeroSSL**.
+  - **Single ZeroSSL API Key Integration**: Enter just your single ZeroSSL API Key; the backend automatically retrieves EAB KID & HMAC Key on-the-fly via ZeroSSL REST API. Also supports direct EAB KID & HMAC Key input.
+  - **Background ACME Auto-Renew Scheduler**: Ticker runs every 12 hours, auto-renewing ACME certs with `daysLeft <= 15`.
+  - **ACME Re-Issuance**: `Re-issue ACME` button appears exclusively for ACME certificates, locking the certificate name and auto-populating previous domain, provider, and DNS token metadata.
+- **DNS-01 Challenge Validation**: Native DNS-01 automation for **Cloudflare**, **DigitalOcean**, **AWS Route53**, and **GoDaddy** (no public IP or NAT Port 80/443 required).
+- **Outbound HTTP / HTTPS / SOCKS5 Proxy**:
+  - Dedicated Proxy settings supporting **Anonymous** (`http://192.168.1.100:8080`) or **Authenticated** (`http://user:pass@proxy.company.com:8080`) proxies.
+  - Automatically applied to ACME certificate issuance, auto-renewals, and notification channels.
+- **Automated Notification Alert Engine**:
+  - User-configurable **`Expiration Warning Days Threshold`** (e.g. 15 days) and **`Notification Check Interval (Hours)`** (e.g. 12 hours).
+  - Multi-channel support: **Telegram Bot**, **Slack Incoming Webhook**, **Custom Generic Webhook** (with secret header), and **Email SMTP**.
+  - **Instant `🧪 Send Test` Button**: Realtime AJAX test notification directly from the modal without needing to save settings first.
+- **Manual vs ACME Certificate Separation**: Clear UX distinction (`+ Add ACME Cert` and `+ Add / Update Manual Cert`). Download buttons are hidden when adding new manual certs.
+- **Live Duplicate Name Checker**: AJAX validation on `blur` event preventing accidental certificate name conflicts.
 - SQLite Database storing certificate PEM contents, public key fingerprints (SHA256), and expiration dates (`not_after`).
 - Automatic X.509 certificate parsing and public/private key cryptographic consistency check prior to saving.
 - Download Cert (`.crt`) and Download Key (`.key`) buttons directly from the Web UI modal.
@@ -62,11 +86,12 @@ graph TD
 - Change Admin Password & Configurable HTTP Management Port via Web UI Settings Modal.
 - REST API protected by Bearer Token Authorization.
 - Native Windows Service support (via Windows SCM) with automatic error logging to `cert-server.log`.
+- **Go 1.26+ Compatible**: Build scripts use `-ldflags="-s -w"` stripping debug symbols to produce optimized ~28MB binaries.
 
 ### Build & Run (Bare Metal / VM)
 ```bash
 cd server
-go build -o cert-server main.go
+go build -ldflags="-s -w" -o cert-server main.go
 ./cert-server
 ```
 By default, the server runs on `http://localhost:8080` (Default credentials: Username `admin`, Password `admin123`).
