@@ -42,23 +42,23 @@ graph TD
 ### 📊 Web Admin Dashboard & KPI Summary
 ![Web Admin Dashboard](screenshot/1.PNG)
 
-### 🔒 ACME Certificate Issuance (ZeroSSL & Let's Encrypt DNS-01)
-![ACME Certificate Issuance](screenshot/3.PNG)
+### 🔒 ACME Certificate Issuance Modal (Let's Encrypt & ZeroSSL DNS-01)
+![ACME Certificate Issuance Modal](screenshot/6.PNG)
 
-### 📜 Manual Certificate Management & Copy/Download
-![Manual Certificate Management](screenshot/2.PNG)
+### 📜 Add / Update Manual Certificate Modal
+![Add Manual Certificate Modal](screenshot/5.PNG)
 
-### 📋 Security Audit Logs
-![System Audit Logs](screenshot/6.PNG)
+### 📋 System Audit Logs Modal
+![System Audit Logs Modal](screenshot/2.PNG)
 
-### ⚙️ System Settings & Multi-Channel Alerts
-![System Settings & Alerts](screenshot/4.PNG)
+### ⚙️ System Settings & Outbound Proxy Configuration
+![System Settings](screenshot/3.PNG)
 
-### 🔐 Secure Login & Default Credentials Helper
-![Secure Login](screenshot/5.PNG)
+### 🔔 Multi-Channel Expiration Alerts & Test Buttons
+![Notification Settings & Test Alerts](screenshot/4.PNG)
 
-### 🔑 API Bearer Token Management
-![API Bearer Token](screenshot/7.PNG)
+### 💻 Cert Agent CLI Terminal (`cert-agent check`)
+![Cert Agent CLI Terminal](screenshot/7.PNG)
 
 </div>
 
