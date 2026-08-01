@@ -150,14 +150,21 @@ func ShowDashboard(c *gin.Context) {
 
 	now := time.Now()
 	var certVMs []CertViewModel
+	expiredCerts := 0
 	expiringSoonCerts := 0
 	activeACMECerts := 0
 
 	for _, cert := range certs {
 		daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
-		if daysLeft <= 15 {
+		isExpired := daysLeft < 0 || cert.NotAfter.Before(now)
+		isWarning := !isExpired && daysLeft < 30
+
+		if isExpired {
+			expiredCerts++
+		} else if daysLeft <= 15 {
 			expiringSoonCerts++
 		}
+
 		if cert.IsACME && cert.AutoRenew {
 			activeACMECerts++
 		}
@@ -166,8 +173,6 @@ func ShowDashboard(c *gin.Context) {
 		if len(shaShort) > 16 {
 			shaShort = shaShort[:16] + "..."
 		}
-		isExpired := daysLeft < 0 || cert.NotAfter.Before(now)
-		isWarning := !isExpired && daysLeft < 30
 
 		certVMs = append(certVMs, CertViewModel{
 			Name:               cert.ServercertName,
@@ -241,6 +246,7 @@ func ShowDashboard(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"totalCerts":               len(certs),
+		"expiredCerts":             expiredCerts,
 		"expiringSoonCerts":        expiringSoonCerts,
 		"activeACMECerts":           activeACMECerts,
 		"certs":                    certVMs,

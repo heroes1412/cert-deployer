@@ -252,12 +252,19 @@
         {{ end }}
 
         <!-- Summary Stat Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">
                 <div class="p-3 bg-blue-500/10 text-blue-400 rounded-lg text-xl">📜</div>
                 <div>
                     <div class="text-2xl font-bold text-slate-100">{{ .totalCerts }}</div>
                     <div class="text-xs font-medium text-slate-400">Total Certificates</div>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">
+                <div class="p-3 bg-red-500/10 text-red-400 rounded-lg text-xl">🚫</div>
+                <div>
+                    <div class="text-2xl font-bold text-red-400">{{ .expiredCerts }}</div>
+                    <div class="text-xs font-medium text-slate-400">Expired Certificates</div>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg flex items-center gap-4">

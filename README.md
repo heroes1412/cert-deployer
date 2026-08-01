@@ -87,7 +87,7 @@ graph TD
   - Bcrypt password hashing (`golang.org/x/crypto/bcrypt`) with automatic legacy plain-text migration.
   - Cryptographically secure 256-bit random session token generation (`crypto/rand`) with `SameSite=Lax` & `HttpOnly` cookies.
   - Dynamic Default Credential Helper banner (`admin / admin123`) on `/login` that automatically disappears upon initial password change.
-- **Dashboard Summary Stat Cards**: 3 top-level KPI metrics displaying Total Certificates, Expiring Soon (&le;15 days), and Active ACME Auto-Renew.
+- **Dashboard Summary Stat Cards**: 4 top-level KPI metrics displaying Total Certificates, Expired Certificates, Expiring Soon (&le;15 days), and Active ACME Auto-Renew.
 - **Agent Nodes Registry & Sync History**:
   - Light-weight `POST /api/v1/agent/heartbeat` endpoint for `cert-agent` nodes.
   - Automatically records agent hostname, IP address, OS/arch, list of synced certificates, and last sync timestamp upon completion of `cert-agent check` or `cert-agent sync` runs.
