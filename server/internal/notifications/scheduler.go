@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"cert-server/internal/crypto"
 	"cert-server/internal/db"
 	"cert-server/internal/models"
 )
@@ -119,8 +120,15 @@ func sendTelegramAlert(certs []models.Certificate, thresholdDays int) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("⚠️ <b>Cert Deployer Expiration Alert</b>\nThe following %d certificate(s) are expiring within %d days:\n\n", len(certs), thresholdDays))
 	for _, c := range certs {
+		domains := c.Domains
+		if domains == "" && c.CertData != "" {
+			domains = crypto.ExtractDomainsFromCertPEM(c.CertData)
+		}
+		if domains == "" {
+			domains = "N/A"
+		}
 		daysLeft := int(time.Until(c.NotAfter).Hours() / 24)
-		sb.WriteString(fmt.Sprintf("• <b>%s</b>: %d days left (Expires: %s)\n", c.ServercertName, daysLeft, c.NotAfter.Format("2006-01-02")))
+		sb.WriteString(fmt.Sprintf("• <b>%s</b>\n  └ 🌐 Domains/SANs: <code>%s</code>\n  └ ⏳ Status: <b>%d days left</b> (Expires: %s)\n\n", c.ServercertName, domains, daysLeft, c.NotAfter.Format("2006-01-02")))
 	}
 
 	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
@@ -147,10 +155,17 @@ func sendSlackAlert(certs []models.Certificate, thresholdDays int) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("⚠️ *Cert Deployer Expiration Alert*\nThe following %d certificate(s) are expiring within %d days:\n", len(certs), thresholdDays))
+	sb.WriteString(fmt.Sprintf("⚠️ *Cert Deployer Expiration Alert*\nThe following %d certificate(s) are expiring within %d days:\n\n", len(certs), thresholdDays))
 	for _, c := range certs {
+		domains := c.Domains
+		if domains == "" && c.CertData != "" {
+			domains = crypto.ExtractDomainsFromCertPEM(c.CertData)
+		}
+		if domains == "" {
+			domains = "N/A"
+		}
 		daysLeft := int(time.Until(c.NotAfter).Hours() / 24)
-		sb.WriteString(fmt.Sprintf("• *%s*: %d days left (Expires: %s)\n", c.ServercertName, daysLeft, c.NotAfter.Format("2006-01-02")))
+		sb.WriteString(fmt.Sprintf("• *%s*\n  > 🌐 Domains/SANs: `%s`\n  > ⏳ Status: *%d days left* (Expires: %s)\n\n", c.ServercertName, domains, daysLeft, c.NotAfter.Format("2006-01-02")))
 	}
 
 	payload := map[string]string{"text": sb.String()}
@@ -169,6 +184,12 @@ func sendCustomWebhookAlert(certs []models.Certificate, thresholdDays int) {
 	webhookURL := db.GetSetting("custom_webhook_url", "")
 	if webhookURL == "" {
 		return
+	}
+
+	for i := range certs {
+		if certs[i].Domains == "" && certs[i].CertData != "" {
+			certs[i].Domains = crypto.ExtractDomainsFromCertPEM(certs[i].CertData)
+		}
 	}
 
 	payload := map[string]interface{}{
@@ -214,8 +235,15 @@ func sendEmailAlert(certs []models.Certificate, thresholdDays int) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Cert Deployer Expiration Alert\n\nThe following %d certificate(s) are expiring within %d days:\n\n", len(certs), thresholdDays))
 	for _, c := range certs {
+		domains := c.Domains
+		if domains == "" && c.CertData != "" {
+			domains = crypto.ExtractDomainsFromCertPEM(c.CertData)
+		}
+		if domains == "" {
+			domains = "N/A"
+		}
 		daysLeft := int(time.Until(c.NotAfter).Hours() / 24)
-		sb.WriteString(fmt.Sprintf("- %s: %d days left (Expires: %s)\n", c.ServercertName, daysLeft, c.NotAfter.Format("2006-01-02")))
+		sb.WriteString(fmt.Sprintf("- %s\n  Domains/SANs: %s\n  Status: %d days left (Expires: %s)\n\n", c.ServercertName, domains, daysLeft, c.NotAfter.Format("2006-01-02")))
 	}
 
 	msg := []byte(subject + header + sb.String())

@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"cert-agent/internal/agent"
@@ -139,19 +140,24 @@ var checkCmd = &cobra.Command{
 		}
 
 		// Print ASCII Table: SERVERCERT NAME | DOMAINS / SANS | SERVER EXPIRATION | LOCAL EXPIRATION | STATUS
-		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
-		fmt.Println("| SERVERCERT NAME | DOMAINS / SANS                | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS           |")
-		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
+		fmt.Println("+-----------------+-------------------------------------+---------------------+---------------------+------------------+")
+		fmt.Println("| SERVERCERT NAME | DOMAINS / SANS                      | SERVER EXPIRATION   | LOCAL EXPIRATION    | STATUS           |")
+		fmt.Println("+-----------------+-------------------------------------+---------------------+---------------------+------------------+")
 		for _, r := range rows {
-			fmt.Printf("| %-15s | %-29s | %-19s | %-19s | %-16s |\n",
+			domStr := r.Domains
+			parts := strings.Split(r.Domains, ",")
+			if len(parts) > 1 && len(domStr) > 35 {
+				domStr = fmt.Sprintf("%s (+%d SANs)", strings.TrimSpace(parts[0]), len(parts)-1)
+			}
+			fmt.Printf("| %-15s | %-35s | %-19s | %-19s | %-16s |\n",
 				truncateStr(r.Name, 15),
-				truncateStr(r.Domains, 29),
+				truncateStr(domStr, 35),
 				truncateStr(r.ServerExp, 19),
 				truncateStr(r.LocalExp, 19),
 				truncateStr(r.Status, 16),
 			)
 		}
-		fmt.Println("+-----------------+-------------------------------+---------------------+---------------------+------------------+")
+		fmt.Println("+-----------------+-------------------------------------+---------------------+---------------------+------------------+")
 
 		var certNames []string
 		for _, c := range cfg.Certs {

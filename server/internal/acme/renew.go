@@ -1,6 +1,7 @@
 package acme
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -57,15 +58,45 @@ func runAutoRenewCheck() {
 			continue
 		}
 
+		dnsToken := cert.DNSAPIToken
+		if dnsToken == "" {
+			switch cert.DNSProvider {
+			case "cloudflare":
+				dnsToken = db.GetSetting("acme_default_cloudflare_token", "")
+			case "digitalocean":
+				dnsToken = db.GetSetting("acme_default_digitalocean_token", "")
+			case "route53":
+				dnsToken = db.GetSetting("acme_default_route53_secret", "")
+			case "godaddy":
+				dnsToken = db.GetSetting("acme_default_godaddy_token", "")
+			}
+		}
+
+		email := cert.ACMEEmail
+		if email == "" {
+			email = db.GetSetting("acme_default_email", "")
+		}
+
+		eabKid := cert.EABKID
+		eabHmac := cert.EABHMACKey
+		if cert.ACMEProvider == "zerossl" {
+			if eabKid == "" {
+				eabKid = db.GetSetting("acme_default_zerossl_kid", "")
+			}
+			if eabHmac == "" {
+				eabHmac = db.GetSetting("acme_default_zerossl_hmac", "")
+			}
+		}
+
 		req := ACMERequest{
 			ServerCertName: cert.ServercertName,
 			Domains:        cleanedDomains,
 			ACMEProvider:   cert.ACMEProvider,
 			DNSProvider:    cert.DNSProvider,
-			DNSAPIToken:    cert.DNSAPIToken,
-			Email:          cert.ACMEEmail,
-			EABKID:         cert.EABKID,
-			EABHMACKey:     cert.EABHMACKey,
+			DNSAPIToken:    dnsToken,
+			Email:          email,
+			EABKID:         eabKid,
+			EABHMACKey:     eabHmac,
 		}
 
 		res, err := IssueCertificate(req)
@@ -87,6 +118,7 @@ func runAutoRenewCheck() {
 		if err := db.DB.Save(&cert).Error; err != nil {
 			log.Printf("[ERROR] [ACME Auto-Renew] Failed to update DB for '%s': %v", cert.ServercertName, err)
 		} else {
+			db.LogAudit("System (Scheduler)", "Auto Renew ACME", fmt.Sprintf("System background scheduler automatically renewed ACME certificate '%s'", cert.ServercertName))
 			log.Printf("[SUCCESS] [ACME Auto-Renew] Certificate '%s' successfully renewed! New expiration: %s", cert.ServercertName, cert.NotAfter.Format("2006-01-02 15:04:05 UTC"))
 		}
 	}

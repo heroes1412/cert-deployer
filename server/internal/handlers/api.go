@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"cert-server/internal/crypto"
 	"cert-server/internal/db"
 	"cert-server/internal/models"
 
@@ -37,13 +38,21 @@ func GetCertFull(c *gin.Context) {
 		return
 	}
 
+	domains := cert.Domains
+	if domains == "" && cert.CertData != "" {
+		domains = crypto.ExtractDomainsFromCertPEM(cert.CertData)
+		if domains != "" {
+			db.DB.Model(&models.Certificate{}).Where("id = ?", cert.ID).Update("domains", domains)
+		}
+	}
+
 	c.JSON(http.StatusOK, FullCertResponse{
 		ServercertName: cert.ServercertName,
 		CertPEM:        cert.CertData,
 		KeyPEM:         cert.KeyData,
 		SHA256:         cert.FingerprintSHA256,
 		NotAfter:       cert.NotAfter.Format("2006-01-02T15:04:05Z"),
-		Domains:        cert.Domains,
+		Domains:        domains,
 	})
 }
 
@@ -57,11 +66,19 @@ func GetCertMeta(c *gin.Context) {
 		return
 	}
 
+	domains := cert.Domains
+	if domains == "" && cert.CertData != "" {
+		domains = crypto.ExtractDomainsFromCertPEM(cert.CertData)
+		if domains != "" {
+			db.DB.Model(&models.Certificate{}).Where("id = ?", cert.ID).Update("domains", domains)
+		}
+	}
+
 	c.JSON(http.StatusOK, MetaCertResponse{
 		ServercertName: cert.ServercertName,
 		SHA256:         cert.FingerprintSHA256,
 		NotAfter:       cert.NotAfter.Format("2006-01-02T15:04:05Z"),
-		Domains:        cert.Domains,
+		Domains:        domains,
 	})
 }
 

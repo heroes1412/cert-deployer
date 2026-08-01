@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var validCertNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 ._-]+$`)
+
+func isValidCertName(name string) bool {
+	if name == "" {
+		return false
+	}
+	return validCertNameRegex.MatchString(name)
+}
+
 const (
 	AdminUser         = "admin"
 	DefaultAdminPass  = "admin123"
@@ -31,10 +41,13 @@ type CertViewModel struct {
 	KeyData            string
 	SHA256             string
 	SHA256Short        string
+	SHA256Short5       string
+	NotAfterISO        string
 	NotAfterFormatted  string
 	DaysRemaining      int
 	IsExpired          bool
 	IsWarning          bool
+	UpdatedAtISO       string
 	UpdatedAtFormatted string
 	IsACME             bool
 	ACMEProvider       string
@@ -42,6 +55,7 @@ type CertViewModel struct {
 	DNSAPIToken        string
 	ACMEEmail          string
 	Domains            string
+	DomainsList        []string
 	EABKID             string
 	EABHMACKey         string
 	AutoRenew          bool
@@ -60,6 +74,7 @@ type AuditLogViewModel struct {
 	IPAddress          string
 	Action             string
 	Details            string
+	CreatedAtISO       string
 	CreatedAtFormatted string
 }
 
@@ -69,6 +84,8 @@ type AgentNodeViewModel struct {
 	IPAddress         string
 	OSInfo            string
 	SyncedCerts       string
+	SyncedCertsList   []string
+	LastSeenISO       string
 	LastSeenFormatted string
 	IsOnline          bool
 }
@@ -155,6 +172,14 @@ func ShowDashboard(c *gin.Context) {
 	activeACMECerts := 0
 
 	for _, cert := range certs {
+		domains := cert.Domains
+		if domains == "" && cert.CertData != "" {
+			domains = crypto.ExtractDomainsFromCertPEM(cert.CertData)
+			if domains != "" {
+				db.DB.Model(&models.Certificate{}).Where("id = ?", cert.ID).Update("domains", domains)
+			}
+		}
+
 		daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
 		isExpired := daysLeft < 0 || cert.NotAfter.Before(now)
 		isWarning := !isExpired && daysLeft < 30
@@ -165,13 +190,28 @@ func ShowDashboard(c *gin.Context) {
 			expiringSoonCerts++
 		}
 
-		if cert.IsACME && cert.AutoRenew {
+		if cert.IsACME {
 			activeACMECerts++
 		}
 
 		shaShort := cert.FingerprintSHA256
 		if len(shaShort) > 16 {
 			shaShort = shaShort[:16] + "..."
+		}
+		sha5 := cert.FingerprintSHA256
+		if len(sha5) > 5 {
+			sha5 = sha5[:5] + "..."
+		}
+
+		var domainsList []string
+		if domains != "" {
+			parts := strings.Split(domains, ",")
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					domainsList = append(domainsList, p)
+				}
+			}
 		}
 
 		certVMs = append(certVMs, CertViewModel{
@@ -180,17 +220,21 @@ func ShowDashboard(c *gin.Context) {
 			KeyData:            cert.KeyData,
 			SHA256:             cert.FingerprintSHA256,
 			SHA256Short:        shaShort,
-			NotAfterFormatted:  cert.NotAfter.Format("2006-01-02 15:04:05 UTC"),
+			SHA256Short5:       sha5,
+			NotAfterISO:        cert.NotAfter.Format(time.RFC3339),
+			NotAfterFormatted:  cert.NotAfter.Format("2006-01-02 15:04:05"),
 			DaysRemaining:      daysLeft,
 			IsExpired:          isExpired,
 			IsWarning:          isWarning,
+			UpdatedAtISO:       cert.UpdatedAt.Format(time.RFC3339),
 			UpdatedAtFormatted: cert.UpdatedAt.Format("2006-01-02 15:04:05"),
 			IsACME:             cert.IsACME,
 			ACMEProvider:       cert.ACMEProvider,
 			DNSProvider:        cert.DNSProvider,
 			DNSAPIToken:        cert.DNSAPIToken,
 			ACMEEmail:          cert.ACMEEmail,
-			Domains:            cert.Domains,
+			Domains:            domains,
+			DomainsList:        domainsList,
 			EABKID:             cert.EABKID,
 			EABHMACKey:         cert.EABHMACKey,
 			AutoRenew:          cert.AutoRenew,
@@ -221,6 +265,7 @@ func ShowDashboard(c *gin.Context) {
 			IPAddress:          log.IPAddress,
 			Action:             log.Action,
 			Details:            log.Details,
+			CreatedAtISO:       log.CreatedAt.Format(time.RFC3339),
 			CreatedAtFormatted: log.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
@@ -231,12 +276,25 @@ func ShowDashboard(c *gin.Context) {
 	var agentNodeVMs []AgentNodeViewModel
 	for _, node := range rawAgentNodes {
 		isOnline := time.Since(node.LastSeenAt) < 24*time.Hour
+		var syncedList []string
+		if node.SyncedCerts != "" {
+			parts := strings.Split(node.SyncedCerts, ",")
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					syncedList = append(syncedList, p)
+				}
+			}
+		}
+
 		agentNodeVMs = append(agentNodeVMs, AgentNodeViewModel{
 			ID:                node.ID,
 			Hostname:          node.Hostname,
 			IPAddress:         node.IPAddress,
 			OSInfo:            node.OSInfo,
 			SyncedCerts:       node.SyncedCerts,
+			SyncedCertsList:   syncedList,
+			LastSeenISO:       node.LastSeenAt.Format(time.RFC3339),
 			LastSeenFormatted: node.LastSeenAt.Format("2006-01-02 15:04:05"),
 			IsOnline:          isOnline,
 		})
@@ -279,11 +337,22 @@ func ShowDashboard(c *gin.Context) {
 		"enableProxyAuth":          db.GetSetting("enable_proxy_auth", "false") == "true",
 		"proxyUser":                db.GetSetting("proxy_user", ""),
 		"proxyPass":                db.GetSetting("proxy_pass", ""),
+		"acmeDefaultEmail":            db.GetSetting("acme_default_email", ""),
+		"acmeDefaultCloudflareToken":  db.GetSetting("acme_default_cloudflare_token", ""),
+		"acmeDefaultDigitalOceanToken": db.GetSetting("acme_default_digitalocean_token", ""),
+		"acmeDefaultRoute53Secret":    db.GetSetting("acme_default_route53_secret", ""),
+		"acmeDefaultGoDaddyToken":     db.GetSetting("acme_default_godaddy_token", ""),
+		"acmeDefaultZeroSSLKID":       db.GetSetting("acme_default_zerossl_kid", ""),
+		"acmeDefaultZeroSSLHMAC":      db.GetSetting("acme_default_zerossl_hmac", ""),
 	})
 }
 
 func SaveCertificate(c *gin.Context) {
-	name := c.PostForm("servercert_name")
+	name := strings.TrimSpace(c.PostForm("servercert_name"))
+	if !isValidCertName(name) {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Invalid+ServerCert+Name.+Only+letters,+numbers,+space,+dot+(.),+hyphen+(-),+and+underscore+(_)+are+allowed.")
+		return
+	}
 	certPEM := c.PostForm("cert_data")
 	keyPEM := c.PostForm("key_data")
 
@@ -302,8 +371,14 @@ func SaveCertificate(c *gin.Context) {
 		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
 		existing.NotAfter = certInfo.NotAfter
 		existing.Domains = certInfo.Domains
-		db.DB.Save(&existing)
-		db.LogAudit(c.ClientIP(), "Update Manual Cert", fmt.Sprintf("Updated manual certificate '%s'", name))
+		if existing.IsACME {
+			existing.AutoRenew = true
+			db.DB.Save(&existing)
+			db.LogAudit(c.ClientIP(), "Update ACME Cert", fmt.Sprintf("Updated ACME certificate '%s'", name))
+		} else {
+			db.DB.Save(&existing)
+			db.LogAudit(c.ClientIP(), "Update Manual Cert", fmt.Sprintf("Updated manual certificate '%s'", name))
+		}
 	} else {
 		// Create new
 		newCert := models.Certificate{
@@ -422,6 +497,15 @@ func SaveSettings(c *gin.Context) {
 	_ = db.SetSetting("custom_webhook_url", c.PostForm("custom_webhook_url"))
 	_ = db.SetSetting("custom_webhook_secret", c.PostForm("custom_webhook_secret"))
 
+	// 3. ACME Default Credentials Settings
+	_ = db.SetSetting("acme_default_email", strings.TrimSpace(c.PostForm("acme_default_email")))
+	_ = db.SetSetting("acme_default_cloudflare_token", strings.TrimSpace(c.PostForm("acme_default_cloudflare_token")))
+	_ = db.SetSetting("acme_default_digitalocean_token", strings.TrimSpace(c.PostForm("acme_default_digitalocean_token")))
+	_ = db.SetSetting("acme_default_route53_secret", strings.TrimSpace(c.PostForm("acme_default_route53_secret")))
+	_ = db.SetSetting("acme_default_godaddy_token", strings.TrimSpace(c.PostForm("acme_default_godaddy_token")))
+	_ = db.SetSetting("acme_default_zerossl_kid", strings.TrimSpace(c.PostForm("acme_default_zerossl_kid")))
+	_ = db.SetSetting("acme_default_zerossl_hmac", strings.TrimSpace(c.PostForm("acme_default_zerossl_hmac")))
+
 	if c.PostForm("enable_telegram") == "on" || c.PostForm("enable_telegram") == "true" {
 		_ = db.SetSetting("enable_telegram", "true")
 	} else {
@@ -443,7 +527,7 @@ func SaveSettings(c *gin.Context) {
 		_ = db.SetSetting("enable_webhook", "false")
 	}
 
-	// 3. Handle Password Change if requested
+	// 4. Handle Password Change if requested
 	if currentPass != "" || newPass != "" {
 		dbPassHash := db.GetSetting("admin_password", "")
 		if !db.CheckPassword(currentPass, dbPassHash) {
@@ -463,12 +547,16 @@ func SaveSettings(c *gin.Context) {
 		}
 	}
 
-	db.LogAudit(c.ClientIP(), "Update Settings", "Updated system settings (Proxy, Notifications, or Password)")
+	db.LogAudit(c.ClientIP(), "Update Settings", "Updated system settings (Proxy, Notifications, ACME Config, or Password)")
 	c.Redirect(http.StatusSeeOther, "/admin?msg="+msg)
 }
 
 func IssueACMECertificate(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("servercert_name"))
+	if !isValidCertName(name) {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Invalid+ServerCert+Name.+Only+letters,+numbers,+space,+dot+(.),+hyphen+(-),+and+underscore+(_)+are+allowed.")
+		return
+	}
 	domainStr := strings.TrimSpace(c.PostForm("domains"))
 	acmeProvider := strings.TrimSpace(c.PostForm("acme_provider"))
 	dnsProvider := strings.TrimSpace(c.PostForm("dns_provider"))
@@ -476,6 +564,54 @@ func IssueACMECertificate(c *gin.Context) {
 	email := strings.TrimSpace(c.PostForm("email"))
 	eabKid := strings.TrimSpace(c.PostForm("eab_kid"))
 	eabHmac := strings.TrimSpace(c.PostForm("eab_hmac_key"))
+
+	var existing models.Certificate
+	hasExisting := db.DB.Where("servercert_name = ?", name).First(&existing).Error == nil
+
+	// Resolution hierarchy:
+	// 1. Form input (manual override or pre-filled from cert DB)
+	// 2. Existing Certificate DB record (if renewing and form input left blank)
+	// 3. System Settings ACME pre-configured defaults (if issuing new cert and form left blank)
+
+	if email == "" {
+		if hasExisting && existing.ACMEEmail != "" {
+			email = existing.ACMEEmail
+		} else {
+			email = db.GetSetting("acme_default_email", "")
+		}
+	}
+	if dnsToken == "" {
+		if hasExisting && existing.DNSAPIToken != "" && (dnsProvider == "" || dnsProvider == existing.DNSProvider) {
+			dnsToken = existing.DNSAPIToken
+		} else {
+			switch dnsProvider {
+			case "cloudflare":
+				dnsToken = db.GetSetting("acme_default_cloudflare_token", "")
+			case "digitalocean":
+				dnsToken = db.GetSetting("acme_default_digitalocean_token", "")
+			case "route53":
+				dnsToken = db.GetSetting("acme_default_route53_secret", "")
+			case "godaddy":
+				dnsToken = db.GetSetting("acme_default_godaddy_token", "")
+			}
+		}
+	}
+	if acmeProvider == "zerossl" {
+		if eabKid == "" {
+			if hasExisting && existing.EABKID != "" {
+				eabKid = existing.EABKID
+			} else {
+				eabKid = db.GetSetting("acme_default_zerossl_kid", "")
+			}
+		}
+		if eabHmac == "" {
+			if hasExisting && existing.EABHMACKey != "" {
+				eabHmac = existing.EABHMACKey
+			} else {
+				eabHmac = db.GetSetting("acme_default_zerossl_hmac", "")
+			}
+		}
+	}
 
 	if name == "" || domainStr == "" || dnsToken == "" || email == "" {
 		c.Redirect(http.StatusSeeOther, "/admin?error=Please+fill+in+all+required+fields+(Name,+Domains,+Email,+DNS+Token)")
@@ -518,8 +654,7 @@ func IssueACMECertificate(c *gin.Context) {
 
 	// 3. Save directly into SQLite Database
 	domainsJoined := strings.Join(cleanedDomains, ", ")
-	var existing models.Certificate
-	if err := db.DB.Where("servercert_name = ?", name).First(&existing).Error; err == nil {
+	if hasExisting {
 		existing.CertData = res.CertPEM
 		existing.KeyData = res.KeyPEM
 		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
@@ -561,12 +696,16 @@ func IssueACMECertificate(c *gin.Context) {
 func CheckCertName(c *gin.Context) {
 	name := strings.TrimSpace(c.Query("name"))
 	if name == "" {
-		c.JSON(http.StatusOK, gin.H{"exists": false})
+		c.JSON(http.StatusOK, gin.H{"exists": false, "invalid": false})
+		return
+	}
+	if !isValidCertName(name) {
+		c.JSON(http.StatusOK, gin.H{"exists": false, "invalid": true, "message": "Only letters, numbers, space, dot (.), hyphen (-), and underscore (_) are allowed!"})
 		return
 	}
 	var existing models.Certificate
 	err := db.DB.Where("servercert_name = ?", name).First(&existing).Error
-	c.JSON(http.StatusOK, gin.H{"exists": err == nil})
+	c.JSON(http.StatusOK, gin.H{"exists": err == nil, "invalid": false})
 }
 
 func TestNotification(c *gin.Context) {

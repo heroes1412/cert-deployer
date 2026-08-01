@@ -85,3 +85,49 @@ func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
 		Domains:           domainsStr,
 	}, nil
 }
+
+func ExtractDomainsFromCertPEM(certPEM string) string {
+	certPEM = strings.TrimSpace(certPEM)
+	if certPEM == "" {
+		return ""
+	}
+
+	var certBlock *pem.Block
+	rest := []byte(certPEM)
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type == "CERTIFICATE" {
+			certBlock = block
+			break
+		}
+	}
+
+	if certBlock == nil {
+		return ""
+	}
+
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return ""
+	}
+
+	domainMap := make(map[string]bool)
+	var domainsList []string
+	if cert.Subject.CommonName != "" {
+		cn := strings.TrimSpace(cert.Subject.CommonName)
+		domainMap[cn] = true
+		domainsList = append(domainsList, cn)
+	}
+	for _, san := range cert.DNSNames {
+		san = strings.TrimSpace(san)
+		if san != "" && !domainMap[san] {
+			domainMap[san] = true
+			domainsList = append(domainsList, san)
+		}
+	}
+	return strings.Join(domainsList, ", ")
+}

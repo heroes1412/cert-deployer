@@ -117,13 +117,25 @@ graph TD
   - Bcrypt password hashing (`golang.org/x/crypto/bcrypt`) with automatic legacy plain-text migration.
   - Cryptographically secure 256-bit random session token generation (`crypto/rand`) with `SameSite=Lax` & `HttpOnly` cookies.
   - Dynamic Default Credential Helper banner (`admin / admin123`) on `/login` that automatically disappears upon initial password change.
-- **Dashboard Summary Stat Cards**: 4 top-level KPI metrics displaying Total Certificates, Expired Certificates, Expiring Soon (&le;15 days), and Active ACME Auto-Renew.
+- **Pre-Configured ACME Credentials Sub-Menu**:
+  - Dedicated **`🔑 ACME Credentials`** tab in System Settings (`⚙️ Settings`).
+  - Pre-configure default Registration Email, DNS Provider API Tokens (Cloudflare, DigitalOcean, AWS Route53, GoDaddy), and ZeroSSL EAB credentials.
+  - Smart 3-tier credential resolution (Form Input -> Saved Cert Record in DB -> Settings Pre-config Fallback) for seamless background auto-renewals.
+- **Client-Side Pagination & Enhanced Table Filters**:
+  - Built-in pagination (10 certificates per page) with interactive page controls (`Prev`, `Next`, page numbers) and dynamic entry counters.
+  - Dedicated Filter Tabs: **`All`**, **`ACME Cert`**, **`Manual Cert`**, **`Active`**, **`Expiring Soon`**, and **`Expired`** with live badge counters.
+  - Streamlined table design: Removed redundant SHA256 column for a cleaner, responsive layout.
+- **Strict Certificate Name Validation & Decoupled Checking**:
+  - Enforces strict character validation for `servercert_name`: allows only `a-z`, `A-Z`, `0-9`, space (` `), dot (`.`), hyphen (`-`), and underscore (`_`).
+  - Decoupled verification: Real-time format checking runs locally on `oninput`, while SQLite database duplication check fires only on `onblur` when leaving the field.
+- **Dashboard Summary & Quick Actions**:
+  - Streamlined UI with live filter pill counters and clean quick-action buttons.
 - **Agent Nodes Registry & Sync History**:
   - Light-weight `POST /api/v1/agent/heartbeat` endpoint for `cert-agent` nodes.
   - Automatically records agent hostname, IP address, OS/arch, list of synced certificates, and last sync timestamp upon completion of `cert-agent check` or `cert-agent sync` runs.
   - Serves as a historical registry of target web servers that have synced with Cert Server (without maintaining long-lived TCP/WebSocket connections).
 - **Security Audit Logs (Modal UI & 6-Month Retention)**:
-  - Full activity log recording timestamp, client IP, action (`User Login`, `Create Manual Cert`, `Update Manual Cert`, `Issue ACME Cert`, `Delete Certificate`, `Generate API Token`, `Revoke API Token`, `Update Settings`), and event details.
+  - Full activity log recording timestamp, client IP, action (`User Login`, `Create Manual Cert`, `Update Manual Cert`, `Issue ACME Cert`, `Update ACME Cert`, `Delete Certificate`, `Generate API Token`, `Revoke API Token`, `Update Settings`), and event details.
   - Accessible directly via the **`📋 Audit Logs`** button on the top navigation bar next to **`⚙️ Settings`**.
   - **Automatic 6-Month Retention Policy**: Integrated into the daily SQLite maintenance scheduler to automatically purge audit log records older than 6 months (180 days).
 - **Enhanced Edit Certificate Modal**:
