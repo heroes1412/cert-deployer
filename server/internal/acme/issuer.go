@@ -18,11 +18,13 @@ import (
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/digitalocean"
 	"github.com/go-acme/lego/v4/providers/dns/godaddy"
 	"github.com/go-acme/lego/v4/providers/dns/route53"
+	"github.com/go-acme/lego/v4/providers/dns/vultr"
 	"github.com/go-acme/lego/v4/registration"
 )
 
@@ -51,6 +53,40 @@ var acmeSharedTransport = &http.Transport{
 var acmeSharedHTTPClient = &http.Client{
 	Timeout:   15 * time.Second,
 	Transport: acmeSharedTransport,
+}
+
+type FreeDNSProvider struct {
+	token string
+}
+
+func NewFreeDNSProvider(token string) *FreeDNSProvider {
+	return &FreeDNSProvider{token: token}
+}
+
+func (p *FreeDNSProvider) Present(domain, token, keyAuth string) error {
+	info := dns01.GetChallengeInfo(domain, keyAuth)
+	reqURL := fmt.Sprintf("https://freedns.afraid.org/api/?action=set_txt&token=%s&host=%s&value=%s",
+		url.QueryEscape(p.token),
+		url.QueryEscape(info.FQDN),
+		url.QueryEscape(info.Value),
+	)
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: acmeSharedTransport,
+	}
+	resp, err := client.Get(reqURL)
+	if err != nil {
+		return fmt.Errorf("freedns API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("freedns API returned HTTP status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (p *FreeDNSProvider) CleanUp(domain, token, keyAuth string) error {
+	return nil
 }
 
 func fetchZeroSSLEABFromAPIKey(apiKey string) (string, string, error) {
@@ -171,6 +207,12 @@ func IssueCertificate(req ACMERequest) (*ACMEResult, error) {
 			gdCfg.APIKey = req.DNSAPIToken
 		}
 		provider, err = godaddy.NewDNSProviderConfig(gdCfg)
+	case "vultr":
+		vCfg := vultr.NewDefaultConfig()
+		vCfg.APIKey = req.DNSAPIToken
+		provider, err = vultr.NewDNSProviderConfig(vCfg)
+	case "freedns":
+		provider = NewFreeDNSProvider(req.DNSAPIToken)
 	default:
 		return nil, fmt.Errorf("unsupported DNS provider: %s", req.DNSProvider)
 	}

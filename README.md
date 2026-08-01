@@ -103,7 +103,7 @@ graph TD
   - **Single ZeroSSL API Key Integration**: Enter just your single ZeroSSL API Key; the backend automatically retrieves EAB KID & HMAC Key on-the-fly via ZeroSSL REST API. Also supports direct EAB KID & HMAC Key input.
   - **Background ACME Auto-Renew Scheduler**: Ticker runs every 12 hours, auto-renewing ACME certs with `daysLeft <= 15`.
   - **ACME Re-Issuance**: `Re-issue ACME` button appears exclusively for ACME certificates, locking the certificate name and auto-populating previous domain, provider, and DNS token metadata.
-- **DNS-01 Challenge Validation**: Native DNS-01 automation for **Cloudflare**, **DigitalOcean**, **AWS Route53**, and **GoDaddy** (no public IP or NAT Port 80/443 required).
+- **DNS-01 Challenge Validation**: Native DNS-01 automation for **Cloudflare**, **DigitalOcean**, **AWS Route53**, **GoDaddy**, **Vultr**, and **FreeDNS / afraid.org** (no public IP or NAT Port 80/443 required).
 - **Outbound HTTP / HTTPS / SOCKS5 Proxy**:
   - Dedicated Proxy settings supporting **Anonymous** (`http://192.168.1.100:8080`) or **Authenticated** (`http://user:pass@proxy.company.com:8080`) proxies.
   - Automatically applied to ACME certificate issuance, auto-renewals, and notification channels.
