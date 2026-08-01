@@ -92,9 +92,10 @@ graph TD
   - Light-weight `POST /api/v1/agent/heartbeat` endpoint for `cert-agent` nodes.
   - Automatically records agent hostname, IP address, OS/arch, list of synced certificates, and last sync timestamp upon completion of `cert-agent check` or `cert-agent sync` runs.
   - Serves as a historical registry of target web servers that have synced with Cert Server (without maintaining long-lived TCP/WebSocket connections).
-- **Security Audit Logs (Modal UI)**:
+- **Security Audit Logs (Modal UI & 6-Month Retention)**:
   - Full activity log recording timestamp, client IP, action (`User Login`, `Create Manual Cert`, `Update Manual Cert`, `Issue ACME Cert`, `Delete Certificate`, `Generate API Token`, `Revoke API Token`, `Update Settings`), and event details.
   - Accessible directly via the **`📋 Audit Logs`** button on the top navigation bar next to **`⚙️ Settings`**.
+  - **Automatic 6-Month Retention Policy**: Integrated into the daily SQLite maintenance scheduler to automatically purge audit log records older than 6 months (180 days).
 - **Enhanced Edit Certificate Modal**:
   - `📋 Copy Cert` and `📋 Copy Key` buttons alongside `💾 Download Cert` and `💾 Download Key` for fast clipboard copying (hidden during new manual cert creation).
 - **REST API protected by Bearer Token Authorization.**

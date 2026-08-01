@@ -84,18 +84,27 @@ func RunNotificationCheck() {
 		return
 	}
 
+	enableTelegram := db.GetSetting("enable_telegram", "false") == "true"
+	enableSlack := db.GetSetting("enable_slack", "false") == "true"
+	enableWebhook := db.GetSetting("enable_webhook", "false") == "true"
+	enableEmail := db.GetSetting("enable_email", "false") == "true"
+
+	if !enableTelegram && !enableSlack && !enableWebhook && !enableEmail {
+		return
+	}
+
 	log.Printf("[INFO] [Notification Scheduler] Found %d certificate(s) expiring within %d days. Sending alerts...", len(warningCerts), warningDays)
 
-	if db.GetSetting("enable_telegram", "false") == "true" {
+	if enableTelegram {
 		sendTelegramAlert(warningCerts, warningDays)
 	}
-	if db.GetSetting("enable_slack", "false") == "true" {
+	if enableSlack {
 		sendSlackAlert(warningCerts, warningDays)
 	}
-	if db.GetSetting("enable_webhook", "false") == "true" {
+	if enableWebhook {
 		sendCustomWebhookAlert(warningCerts, warningDays)
 	}
-	if db.GetSetting("enable_email", "false") == "true" {
+	if enableEmail {
 		sendEmailAlert(warningCerts, warningDays)
 	}
 }

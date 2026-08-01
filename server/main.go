@@ -57,6 +57,7 @@ func runServer() {
 	// Start Daily SQLite Database Maintenance & VACUUM Scheduler
 	db.StartDailyDatabaseMaintenance()
 
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	_ = r.SetTrustedProxies(nil)
 

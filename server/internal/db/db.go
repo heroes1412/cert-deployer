@@ -144,10 +144,23 @@ func runDatabaseMaintenance() {
 	if DB == nil {
 		return
 	}
-	log.Println("[INFO] [DB Maintenance] Running daily SQLite WAL checkpoint & VACUUM...")
+	log.Println("[INFO] [DB Maintenance] Running daily SQLite WAL checkpoint, audit log retention cleanup & VACUUM...")
+
+	// 1. Purge audit logs older than 6 months (180 days)
+	sixMonthsAgo := time.Now().AddDate(0, -6, 0)
+	res := DB.Where("created_at < ?", sixMonthsAgo).Delete(&models.AuditLog{})
+	if res.Error != nil {
+		log.Printf("[WARNING] [DB Maintenance] Failed to purge audit logs older than 6 months: %v", res.Error)
+	} else if res.RowsAffected > 0 {
+		log.Printf("[INFO] [DB Maintenance] Purged %d audit log entries older than 6 months (%s)", res.RowsAffected, sixMonthsAgo.Format("2006-01-02"))
+	}
+
+	// 2. Truncate WAL journal
 	if err := DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
 		log.Printf("[WARNING] [DB Maintenance] Failed to truncate WAL journal: %v", err)
 	}
+
+	// 3. Reclaim unallocated database disk space
 	if err := DB.Exec("VACUUM").Error; err != nil {
 		log.Printf("[WARNING] [DB Maintenance] Failed to execute VACUUM: %v", err)
 	} else {
