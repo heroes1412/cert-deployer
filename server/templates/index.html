@@ -213,6 +213,7 @@
             let countAll = rows.length;
             let countAcme = 0;
             let countManual = 0;
+            let countInternal = 0;
             let countActive = 0;
             let countWarning = 0;
             let countExpired = 0;
@@ -220,8 +221,10 @@
             rows.forEach(r => {
                 const st = r.getAttribute('data-status');
                 const isAcme = r.getAttribute('data-isacme') === 'true' || r.getAttribute('data-isacme') === '1';
+                const provider = r.getAttribute('data-provider') || '';
 
-                if (isAcme) countAcme++;
+                if (provider === 'internal_ca') countInternal++;
+                else if (isAcme) countAcme++;
                 else countManual++;
 
                 if (st === 'expired') countExpired++;
@@ -232,6 +235,7 @@
             const elAll = document.getElementById('badgeCountAll');
             const elAcme = document.getElementById('badgeCountAcme');
             const elManual = document.getElementById('badgeCountManual');
+            const elInternal = document.getElementById('badgeCountInternal');
             const elActive = document.getElementById('badgeCountActive');
             const elWarning = document.getElementById('badgeCountWarning');
             const elExpired = document.getElementById('badgeCountExpired');
@@ -239,6 +243,7 @@
             if (elAll) elAll.innerText = countAll;
             if (elAcme) elAcme.innerText = countAcme;
             if (elManual) elManual.innerText = countManual;
+            if (elInternal) elInternal.innerText = countInternal;
             if (elActive) elActive.innerText = countActive;
             if (elWarning) elWarning.innerText = countWarning;
             if (elExpired) elExpired.innerText = countExpired;
@@ -250,7 +255,7 @@
             certActiveFilter = filterType;
             certCurrentPage = 1;
 
-            ['All', 'Acme', 'Manual', 'Active', 'Warning', 'Expired'].forEach(name => {
+            ['All', 'Acme', 'Manual', 'Internal', 'Active', 'Warning', 'Expired'].forEach(name => {
                 const btn = document.getElementById('filterBtn' + name);
                 if (!btn) return;
                 if (name.toLowerCase() === filterType) {
@@ -299,6 +304,7 @@
                 const domains = (r.getAttribute('data-domains') || '').toLowerCase();
                 const status = r.getAttribute('data-status') || '';
                 const isAcme = r.getAttribute('data-isacme') === 'true' || r.getAttribute('data-isacme') === '1';
+                const provider = r.getAttribute('data-provider') || '';
 
                 let matchQuery = true;
                 if (certSearchQuery) {
@@ -309,7 +315,9 @@
                 if (certActiveFilter === 'acme') {
                     matchFilter = isAcme;
                 } else if (certActiveFilter === 'manual') {
-                    matchFilter = !isAcme;
+                    matchFilter = !isAcme && provider !== 'internal_ca';
+                } else if (certActiveFilter === 'internal') {
+                    matchFilter = provider === 'internal_ca';
                 } else if (certActiveFilter !== 'all') {
                     matchFilter = (status === certActiveFilter);
                 }
@@ -568,6 +576,8 @@
             modal.classList.remove('hidden');
         }
 
+        const certNamePattern = /^[a-z]([a-z0-9 ._-]*[a-z0-9])?$/;
+
         function validateCertNameFormat(inputEl, statusElId) {
             const statusEl = document.getElementById(statusElId);
             if (!statusEl) return;
@@ -575,14 +585,14 @@
                 statusEl.innerHTML = '';
                 return;
             }
-            const name = (inputEl.value || '').trim();
+            const name = (inputEl.value || '');
             if (!name) {
                 statusEl.innerHTML = '';
                 return;
             }
-            if (!/^[a-zA-Z0-9 ._-]+$/.test(name)) {
-                statusEl.className = 'text-xs font-semibold text-red-400 ml-2';
-                statusEl.innerText = '❌ Only a-z, A-Z, 0-9, space, ., -, _ allowed!';
+            if (!certNamePattern.test(name)) {
+                statusEl.className = 'text-xs font-semibold text-red-400 text-right ml-2';
+                statusEl.innerText = '❌ Must be lowercase (a-z), start with letter, end with a-z/0-9!';
             } else {
                 statusEl.innerHTML = '';
             }
@@ -595,27 +605,27 @@
                 statusEl.innerHTML = '';
                 return;
             }
-            const name = (inputEl.value || '').trim();
+            const name = (inputEl.value || '');
             if (!name) {
                 statusEl.innerHTML = '';
                 return;
             }
-            if (!/^[a-zA-Z0-9 ._-]+$/.test(name)) {
-                statusEl.className = 'text-xs font-semibold text-red-400 ml-2';
-                statusEl.innerText = '❌ Only a-z, A-Z, 0-9, space, ., -, _ allowed!';
+            if (!certNamePattern.test(name)) {
+                statusEl.className = 'text-xs font-semibold text-red-400 text-right ml-2';
+                statusEl.innerText = '❌ Must be lowercase (a-z), start with letter, end with a-z/0-9!';
                 return;
             }
             try {
                 const res = await fetch('/admin/certs/check-name?name=' + encodeURIComponent(name));
                 const data = await res.json();
                 if (data.invalid) {
-                    statusEl.className = 'text-xs font-semibold text-red-400 ml-2';
-                    statusEl.innerText = '❌ ' + (data.message || 'Invalid characters!');
+                    statusEl.className = 'text-xs font-semibold text-red-400 text-right ml-2';
+                    statusEl.innerText = '❌ ' + (data.message || 'Invalid format!');
                 } else if (data.exists) {
-                    statusEl.className = 'text-xs font-semibold text-amber-400 ml-2';
+                    statusEl.className = 'text-xs font-semibold text-amber-400 text-right ml-2';
                     statusEl.innerText = '⚠️ Name already exists (will overwrite on save)';
                 } else {
-                    statusEl.className = 'text-xs font-semibold text-emerald-400 ml-2';
+                    statusEl.className = 'text-xs font-semibold text-emerald-400 text-right ml-2';
                     statusEl.innerText = '✅ Name available';
                 }
             } catch (err) {
@@ -677,6 +687,9 @@
                     <p class="text-xs text-slate-400 mt-1">Managed SSL/TLS certificates and key bundles</p>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button onclick="openRequestInternalCertModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow flex items-center gap-1.5">
+                        📜 Request Internal Cert
+                    </button>
                     <button onclick="openACMEModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow">
                         + Add ACME Cert
                     </button>
@@ -701,6 +714,10 @@
                     <button type="button" onclick="setCertFilter('manual')" id="filterBtnManual" class="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5">
                         <span>Manual Cert</span>
                         <span id="badgeCountManual" class="bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded text-[10px]">0</span>
+                    </button>
+                    <button type="button" onclick="setCertFilter('internal')" id="filterBtnInternal" class="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5">
+                        <span>Internal Cert</span>
+                        <span id="badgeCountInternal" class="bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded text-[10px]">0</span>
                     </button>
                     <button type="button" onclick="setCertFilter('active')" id="filterBtnActive" class="px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5">
                         <span>Active</span>
@@ -737,15 +754,21 @@
                     </thead>
                     <tbody id="certTableBody" class="divide-y divide-slate-800/50">
                         {{ range .certs }}
-                        <tr class="cert-row hover:bg-slate-800/30 transition"
+                        <tr class="cert-row border-b border-slate-800/50 hover:bg-slate-800/30 transition"
                             data-name="{{ .Name }}"
                             data-domains="{{ .Domains }}"
                             data-isacme="{{ .IsACME }}"
+                            data-provider="{{ .Provider }}"
                             data-status="{{ if .IsExpired }}expired{{ else if .IsWarning }}warning{{ else }}active{{ end }}">
                             <td class="px-4 py-2.5 font-mono font-semibold">
                                 <button onclick="openEditModal(this)" data-name="{{ .Name }}" data-cert="{{ .CertData }}" data-key="{{ .KeyData }}" class="text-blue-400 hover:underline text-left">
                                     {{ .Name }}
                                 </button>
+                                {{ if .IsInternal }}
+                                <span class="ml-1.5 text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.5 rounded font-mono">Internal CA</span>
+                                {{ else if .IsACME }}
+                                <span class="ml-1.5 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded font-mono">ACME</span>
+                                {{ end }}
                             </td>
                             <td class="px-4 py-2.5 font-mono text-slate-300 text-xs">
                                 <div class="flex flex-wrap gap-1 max-w-[280px]">
@@ -777,7 +800,14 @@
                             <td class="px-4 py-2.5 font-mono text-slate-400 local-time" data-iso="{{ .UpdatedAtISO }}">{{ .UpdatedAtFormatted }}</td>
                             <td class="px-4 py-2.5 text-right whitespace-nowrap">
                                 <div class="flex items-center justify-end gap-2">
-                                    {{ if .IsACME }}
+                                    {{ if .IsInternal }}
+                                    <button onclick="openRequestInternalCertModal(this)"
+                                        data-name="{{ .Name }}"
+                                        data-domains="{{ .Domains }}"
+                                        class="text-indigo-400 hover:text-indigo-300 font-semibold text-xs bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 rounded hover:bg-indigo-500/20 transition">
+                                        Renew Internal
+                                    </button>
+                                    {{ else if .IsACME }}
                                     <button onclick="openACMEModal(this)"
                                         data-name="{{ .Name }}"
                                         data-domains="{{ .Domains }}"
@@ -969,11 +999,11 @@
             </div>
             <form action="/admin/certs/save" method="POST" class="space-y-4">
                 <div>
-                    <div class="flex items-center mb-1">
+                    <div class="flex items-center justify-between mb-1">
                         <label class="block text-xs font-semibold text-slate-400">ServerCert Name (Unique Key)</label>
                         <span id="certNameStatus"></span>
                     </div>
-                    <input type="text" id="certNameInput" name="servercert_name" placeholder="e.g. prod_web_cert" required oninput="validateCertNameFormat(this, 'certNameStatus')" onblur="checkCertNameExists(this, 'certNameStatus')" pattern="^[a-zA-Z0-9 ._-]+$" title="Only letters, numbers, space, dot (.), hyphen (-), and underscore (_) are allowed" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    <input type="text" id="certNameInput" name="servercert_name" placeholder="e.g. prod_web_cert" required oninput="validateCertNameFormat(this, 'certNameStatus')" onblur="checkCertNameExists(this, 'certNameStatus')" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
                 </div>
 
                 <div>
@@ -1032,11 +1062,11 @@
 
             <form action="/admin/certs/acme/issue" method="POST" class="space-y-4">
                 <div>
-                    <div class="flex items-center mb-1">
+                    <div class="flex items-center justify-between mb-1">
                         <label class="block text-xs font-semibold text-slate-400">ServerCert Name (Unique Key)</label>
                         <span id="acmeCertNameStatus"></span>
                     </div>
-                    <input type="text" id="acmeCertNameInput" name="servercert_name" placeholder="e.g. prod_web_acme" required oninput="validateCertNameFormat(this, 'acmeCertNameStatus')" onblur="checkCertNameExists(this, 'acmeCertNameStatus')" pattern="^[a-zA-Z0-9 ._-]+$" title="Only letters, numbers, space, dot (.), hyphen (-), and underscore (_) are allowed" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    <input type="text" id="acmeCertNameInput" name="servercert_name" placeholder="e.g. prod_web_acme" required oninput="validateCertNameFormat(this, 'acmeCertNameStatus')" onblur="checkCertNameExists(this, 'acmeCertNameStatus')" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
                 </div>
 
                 <div>
@@ -1142,6 +1172,9 @@
                 <button type="button" id="tabACMEBtn" onclick="switchSettingsTab('acme')" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
                     🔑 ACME Credentials
                 </button>
+                <button type="button" id="tabInternalCABtn" onclick="switchSettingsTab('internal_ca')" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                    🏛️ Internal Root CA
+                </button>
             </div>
 
             <script>
@@ -1149,12 +1182,14 @@
                     const generalTab = document.getElementById('tabGeneralContent');
                     const notifyTab = document.getElementById('tabNotifyContent');
                     const acmeTab = document.getElementById('tabACMEContent');
+                    const internalCATab = document.getElementById('tabInternalCAContent');
                     const generalBtn = document.getElementById('tabGeneralBtn');
                     const notifyBtn = document.getElementById('tabNotifyBtn');
                     const acmeBtn = document.getElementById('tabACMEBtn');
+                    const internalCABtn = document.getElementById('tabInternalCABtn');
 
-                    [generalTab, notifyTab, acmeTab].forEach(t => t && t.classList.add('hidden'));
-                    [generalBtn, notifyBtn, acmeBtn].forEach(b => {
+                    [generalTab, notifyTab, acmeTab, internalCATab].forEach(t => t && t.classList.add('hidden'));
+                    [generalBtn, notifyBtn, acmeBtn, internalCABtn].forEach(b => {
                         if (!b) return;
                         b.classList.remove('border-blue-500', 'text-blue-400');
                         b.classList.add('border-transparent', 'text-slate-400');
@@ -1177,6 +1212,12 @@
                         if (acmeBtn) {
                             acmeBtn.classList.add('border-blue-500', 'text-blue-400');
                             acmeBtn.classList.remove('border-transparent', 'text-slate-400');
+                        }
+                    } else if (tabName === 'internal_ca') {
+                        if (internalCATab) internalCATab.classList.remove('hidden');
+                        if (internalCABtn) {
+                            internalCABtn.classList.add('border-blue-500', 'text-blue-400');
+                            internalCABtn.classList.remove('border-transparent', 'text-slate-400');
                         }
                     }
                 }
@@ -1598,6 +1639,82 @@
                     </div>
                 </div>
 
+                <!-- TAB 4: INTERNAL ROOT CA -->
+                <div id="tabInternalCAContent" class="space-y-6 hidden">
+                    <div class="text-xs text-slate-400 bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg flex items-start gap-2">
+                        <span>🏛️</span>
+                        <span>Manage your Internal Root CA to issue internal/private SSL/TLS certificates for enterprise servers, microservices, and internal IP addresses.</span>
+                    </div>
+
+                    <!-- Root CA Status Card -->
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+                                Internal Root CA Status
+                            </h4>
+                            {{ if .hasInternalCA }}
+                            <span class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                                ✓ Root CA Active
+                            </span>
+                            {{ else }}
+                            <span class="text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                                ⚠️ Root CA Not Configured
+                            </span>
+                            {{ end }}
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3 pt-2">
+                            {{ if .hasInternalCA }}
+                            <a href="/admin/settings/ca/download" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-semibold inline-flex items-center gap-1.5 shadow">
+                                📥 Download Root CA (.crt)
+                            </a>
+                            <button type="button" onclick="submitDeleteRootCA()" class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 rounded text-xs font-semibold transition">
+                                🗑️ Delete Root CA
+                            </button>
+                            {{ else }}
+                            <button type="button" onclick="openGenerateRootCAModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold transition shadow flex items-center gap-1.5">
+                                ✨ Generate Root CA (Wizard)
+                            </button>
+                            <button type="button" onclick="openUploadRootCAModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold transition">
+                                📤 Upload Existing Root CA
+                            </button>
+                            {{ end }}
+                        </div>
+                    </div>
+
+                    <!-- Default Cert Issue Settings -->
+                    <div class="space-y-4 border-t border-slate-800 pt-4">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-400">Default Internal Cert Settings</h4>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Default Validity (Years)</label>
+                                <input type="number" name="internal_ca_default_valid_years" value="{{ .internalCADefaultValidYears }}" placeholder="50" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Organization (O)</label>
+                                <input type="text" name="internal_ca_default_org" value="{{ .internalCADefaultOrg }}" placeholder="Internal Network" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Organizational Unit (OU)</label>
+                                <input type="text" name="internal_ca_default_ou" value="{{ .internalCADefaultOU }}" placeholder="IT Dept" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Country Code (C)</label>
+                                <input type="text" name="internal_ca_default_country" value="{{ .internalCADefaultCountry }}" placeholder="VN" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono uppercase">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">State / Province (ST)</label>
+                                <input type="text" name="internal_ca_default_state" value="{{ .internalCADefaultState }}" placeholder="Hanoi" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">City / Locality (L)</label>
+                                <input type="text" name="internal_ca_default_locality" value="{{ .internalCADefaultLocality }}" placeholder="Cau Giay" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
                     <button type="button" onclick="document.getElementById('settingsModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Cancel</button>
                     <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold">Save Settings</button>
@@ -1605,5 +1722,403 @@
             </form>
         </div>
     </div>
+
+    <!-- Request Internal Cert Modal -->
+    <div id="requestInternalCertModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-xl shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <h3 id="internalModalTitle" class="text-lg font-bold text-slate-100 flex items-center gap-2">📜 Request Internal Certificate</h3>
+                <button onclick="document.getElementById('requestInternalCertModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+
+            <form action="/admin/certs/internal/issue" method="POST" class="space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold text-slate-400">ServerCert Name *</label>
+                        <span id="internalCertNameStatus"></span>
+                    </div>
+                    <input type="text" id="internalCertNameInput" name="servercert_name" required
+                        oninput="validateCertNameFormat(this, 'internalCertNameStatus')"
+                        onblur="checkCertNameExists(this, 'internalCertNameStatus')"
+                        placeholder="e.g. internal-web-cert"
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    <p class="text-[11px] text-slate-500 mt-1">Unique identifier used by cert-agent to pull this certificate.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Domains / SANs (Smart Tag Input) *</label>
+                    <div id="internalDomainTagsContainer" onclick="document.getElementById('internalDomainInput')?.focus()" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-wrap items-center gap-1.5 min-h-[44px] cursor-text">
+                        <!-- Smart tags rendered by JS -->
+                    </div>
+                    <input type="hidden" id="internalDomainsHiddenInput" name="domains">
+                    <p class="text-[11px] text-slate-500 mt-1">Type domain/IP (e.g. <code class="text-emerald-400">*.dev.local</code>, <code class="text-emerald-400">192.168.1.50</code>) and press <kbd class="bg-slate-800 px-1 rounded">Space</kbd>, <kbd class="bg-slate-800 px-1 rounded">,</kbd>, or <kbd class="bg-slate-800 px-1 rounded">Enter</kbd> to add tag badge.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Key Algorithm</label>
+                        <select name="key_type" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            <option value="RSA2048">RSA 2048-bit (Standard)</option>
+                            <option value="RSA4096" selected>RSA 4096-bit (High Security)</option>
+                            <option value="ECDSA256">ECDSA P-256 (Fast / Modern)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Validity Duration (Years)</label>
+                        <input type="number" id="internalValidYearsInput" name="valid_years" value="{{ .internalCADefaultValidYears }}" min="1" max="100" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-800/80 pt-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Organization (O)</label>
+                        <input type="text" id="internalOrgInput" name="organization" value="{{ .internalCADefaultOrg }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Organizational Unit (OU)</label>
+                        <input type="text" id="internalOUInput" name="ou" value="{{ .internalCADefaultOU }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Country Code (C)</label>
+                        <input type="text" id="internalCountryInput" name="country" value="{{ .internalCADefaultCountry }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100 font-mono uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">State / Province (ST)</label>
+                        <input type="text" id="internalStateInput" name="state" value="{{ .internalCADefaultState }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="document.getElementById('requestInternalCertModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Cancel</button>
+                    <button type="submit" id="internalSubmitBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Request Internal Cert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Generate Root CA Wizard Modal -->
+    <div id="generateRootCAModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-[60]">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-lg shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">✨ Generate Internal Root CA Wizard</h3>
+                <button onclick="document.getElementById('generateRootCAModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+
+            <form id="generateRootCAForm" onsubmit="submitGenerateRootCA(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Root CA Common Name (CN) *</label>
+                    <input type="text" name="common_name" value="Internal Root CA" required class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Key Algorithm</label>
+                        <select name="key_type" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100">
+                            <option value="RSA4096" selected>RSA 4096-bit (Recommended)</option>
+                            <option value="RSA2048">RSA 2048-bit</option>
+                            <option value="ECDSA256">ECDSA P-256</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Validity (Years)</label>
+                        <input type="number" name="valid_years" value="100" min="1" max="100" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Organization (O)</label>
+                        <input type="text" name="organization" value="Internal Infrastructure" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Organizational Unit (OU)</label>
+                        <input type="text" name="ou" value="Security Operations" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Country Code (C)</label>
+                        <input type="text" name="country" value="VN" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100 font-mono uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">State / Province (ST)</label>
+                        <input type="text" name="state" value="Hanoi" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-100">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="document.getElementById('generateRootCAModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Cancel</button>
+                    <button type="submit" id="generateRootCASubmitBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Generate Root CA</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Root CA Modal -->
+    <div id="uploadRootCAModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-[60]">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-xl shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">📤 Upload Existing Root CA</h3>
+                <button onclick="document.getElementById('uploadRootCAModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+
+            <form id="uploadRootCAForm" onsubmit="submitUploadRootCA(event)" class="space-y-4">
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold text-slate-400">Root Certificate PEM (root-ca.crt) *</label>
+                        <label class="cursor-pointer text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-0.5 rounded border border-slate-700 font-semibold transition">
+                            📁 Browse File (.crt/.pem)
+                            <input type="file" accept=".crt,.pem,.cer" onchange="readTextFileToTextarea(this, 'uploadRootCACertTextarea')" class="hidden">
+                        </label>
+                    </div>
+                    <textarea id="uploadRootCACertTextarea" name="cert_data" required rows="5" placeholder="-----BEGIN CERTIFICATE-----..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono"></textarea>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-semibold text-slate-400">Root Private Key PEM (root-ca.key) *</label>
+                        <label class="cursor-pointer text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-400 px-2 py-0.5 rounded border border-slate-700 font-semibold transition">
+                            📁 Browse File (.key/.pem)
+                            <input type="file" accept=".key,.pem" onchange="readTextFileToTextarea(this, 'uploadRootCAKeyTextarea')" class="hidden">
+                        </label>
+                    </div>
+                    <textarea id="uploadRootCAKeyTextarea" name="key_data" required rows="5" placeholder="-----BEGIN RSA PRIVATE KEY-----..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 font-mono"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="document.getElementById('uploadRootCAModal').classList.add('hidden')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Cancel</button>
+                    <button type="submit" id="uploadRootCASubmitBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold">Upload Root CA</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let internalDomainsList = [];
+
+        function renderDomainTags() {
+            const container = document.getElementById('internalDomainTagsContainer');
+            const hiddenInput = document.getElementById('internalDomainsHiddenInput');
+            if (!container || !hiddenInput) return;
+            container.innerHTML = '';
+
+            internalDomainsList.forEach((domain, idx) => {
+                const tag = document.createElement('span');
+                tag.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm';
+                tag.innerHTML = `
+                    <span>${escapeHTML(domain)}</span>
+                    <button type="button" onclick="removeDomainTag(${idx})" class="hover:text-white text-emerald-400 font-bold focus:outline-none ml-1">&times;</button>
+                `;
+                container.appendChild(tag);
+            });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'internalDomainInput';
+            input.placeholder = internalDomainsList.length === 0 ? 'Type domain/IP & press Space, Comma, or Enter (e.g. *.dev.local)' : 'Add more...';
+            input.className = 'bg-transparent text-slate-100 text-xs focus:outline-none flex-1 min-w-[200px] py-1 px-1 font-mono';
+            
+            input.addEventListener('keydown', function(e) {
+                if (e.key === ' ' || e.key === ',' || e.key === 'Enter') {
+                    e.preventDefault();
+                    addDomainTagFromInput();
+                } else if (e.key === 'Backspace' && input.value === '' && internalDomainsList.length > 0) {
+                    internalDomainsList.pop();
+                    renderDomainTags();
+                    const newInput = document.getElementById('internalDomainInput');
+                    if (newInput) newInput.focus();
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                if (input.value.trim() !== '') {
+                    addDomainTagFromInput();
+                }
+            });
+
+            container.appendChild(input);
+            hiddenInput.value = internalDomainsList.join(', ');
+        }
+
+        function addDomainTagFromInput() {
+            const input = document.getElementById('internalDomainInput');
+            if (!input) return;
+            const raw = input.value.trim();
+            if (!raw) return;
+
+            const parts = raw.split(/[\s,]+/);
+            parts.forEach(p => {
+                p = p.trim();
+                if (p && !internalDomainsList.includes(p)) {
+                    internalDomainsList.push(p);
+                }
+            });
+            renderDomainTags();
+            const newInput = document.getElementById('internalDomainInput');
+            if (newInput) newInput.focus();
+        }
+
+        function removeDomainTag(index) {
+            internalDomainsList.splice(index, 1);
+            renderDomainTags();
+            const input = document.getElementById('internalDomainInput');
+            if (input) input.focus();
+        }
+
+        function openRequestInternalCertModal(btn) {
+            const hasCA = {{ if .hasInternalCA }}true{{ else }}false{{ end }};
+            if (!hasCA) {
+                if (confirm("Internal Root CA is not configured yet.\n\nWould you like to open Settings -> Internal Root CA to generate or upload a Root CA now?")) {
+                    const settingsModal = document.getElementById('settingsModal');
+                    if (settingsModal) {
+                        settingsModal.classList.remove('hidden');
+                        switchSettingsTab('internal_ca');
+                    }
+                }
+                return;
+            }
+
+            const modal = document.getElementById('requestInternalCertModal');
+            if (!modal) return;
+
+            const nameInput = document.getElementById('internalCertNameInput');
+            const validYearsInput = document.getElementById('internalValidYearsInput');
+            const orgInput = document.getElementById('internalOrgInput');
+            const ouInput = document.getElementById('internalOUInput');
+            const countryInput = document.getElementById('internalCountryInput');
+            const stateInput = document.getElementById('internalStateInput');
+
+            const statusEl = document.getElementById('internalCertNameStatus');
+            if (statusEl) statusEl.innerHTML = '';
+
+            if (btn) {
+                const name = btn.getAttribute('data-name');
+                const domainsStr = btn.getAttribute('data-domains') || '';
+                nameInput.value = name;
+                nameInput.readOnly = true;
+                nameInput.classList.remove('bg-slate-950', 'text-slate-100');
+                nameInput.classList.add('bg-slate-800', 'text-slate-400', 'cursor-not-allowed');
+                
+                internalDomainsList = [];
+                if (domainsStr) {
+                    domainsStr.split(',').forEach(d => {
+                        d = d.trim();
+                        if (d && !internalDomainsList.includes(d)) internalDomainsList.push(d);
+                    });
+                }
+                document.getElementById('internalModalTitle').innerText = 'Renew Internal Certificate: ' + name;
+                document.getElementById('internalSubmitBtn').innerText = 'Renew Internal Cert';
+            } else {
+                nameInput.value = '';
+                nameInput.readOnly = false;
+                nameInput.classList.remove('bg-slate-800', 'text-slate-400', 'cursor-not-allowed');
+                nameInput.classList.add('bg-slate-950', 'text-slate-100');
+                internalDomainsList = [];
+                document.getElementById('internalModalTitle').innerText = 'Request Internal Certificate';
+                document.getElementById('internalSubmitBtn').innerText = 'Request Internal Cert';
+            }
+
+            if (validYearsInput && !validYearsInput.value) validYearsInput.value = "{{ .internalCADefaultValidYears }}";
+            if (orgInput && !orgInput.value) orgInput.value = "{{ .internalCADefaultOrg }}";
+            if (ouInput && !ouInput.value) ouInput.value = "{{ .internalCADefaultOU }}";
+            if (countryInput && !countryInput.value) countryInput.value = "{{ .internalCADefaultCountry }}";
+            if (stateInput && !stateInput.value) stateInput.value = "{{ .internalCADefaultState }}";
+
+            renderDomainTags();
+            modal.classList.remove('hidden');
+        }
+
+        function openGenerateRootCAModal() {
+            const modal = document.getElementById('generateRootCAModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function openUploadRootCAModal() {
+            const modal = document.getElementById('uploadRootCAModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function readTextFileToTextarea(input, targetId) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const textarea = document.getElementById(targetId);
+                if (textarea) textarea.value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        async function submitGenerateRootCA(e) {
+            e.preventDefault();
+            const btn = document.getElementById('generateRootCASubmitBtn');
+            if (btn) btn.disabled = true;
+            const form = document.getElementById('generateRootCAForm');
+            const formData = new FormData(form);
+
+            try {
+                const res = await fetch('/admin/settings/ca/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Internal Root CA generated successfully!', 'success', 3000);
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showToast('Failed: ' + (data.message || 'Unknown error'), 'error', 5000);
+                }
+            } catch (err) {
+                showToast('Network error generating Root CA', 'error', 5000);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function submitUploadRootCA(e) {
+            e.preventDefault();
+            const btn = document.getElementById('uploadRootCASubmitBtn');
+            if (btn) btn.disabled = true;
+            const form = document.getElementById('uploadRootCAForm');
+            const formData = new FormData(form);
+
+            try {
+                const res = await fetch('/admin/settings/ca/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Internal Root CA uploaded successfully!', 'success', 3000);
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showToast('Failed: ' + (data.message || 'Unknown error'), 'error', 5000);
+                }
+            } catch (err) {
+                showToast('Network error uploading Root CA', 'error', 5000);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function submitDeleteRootCA() {
+            if (!confirm('Are you sure you want to delete the Internal Root CA?\n\nDeleting Root CA will prevent issuing or renewing internal certificates!')) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/settings/ca/delete', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Internal Root CA deleted successfully!', 'success', 3000);
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showToast('Failed: ' + (data.message || 'Unknown error'), 'error', 5000);
+                }
+            } catch (err) {
+                showToast('Network error deleting Root CA', 'error', 5000);
+            }
+        }
+    </script>
 </body>
 </html>

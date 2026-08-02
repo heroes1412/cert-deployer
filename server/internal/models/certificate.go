@@ -20,6 +20,7 @@ type Certificate struct {
 	EABKID            string    `gorm:"type:text" json:"eab_kid"`
 	EABHMACKey        string    `gorm:"type:text" json:"eab_hmac_key"`
 	AutoRenew         bool      `gorm:"default:true" json:"auto_renew"`
+	Provider          string    `gorm:"type:text;default:'manual'" json:"provider"`
 	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

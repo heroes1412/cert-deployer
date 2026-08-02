@@ -83,6 +83,11 @@ func runServer() {
 		admin.POST("/tokens/revoke", handlers.RevokeAPIToken)
 		admin.POST("/settings/save", handlers.SaveSettings)
 		admin.POST("/notifications/test", handlers.TestNotification)
+		admin.POST("/certs/internal/issue", handlers.HandleIssueInternalCert)
+		admin.POST("/settings/ca/generate", handlers.HandleGenerateRootCA)
+		admin.POST("/settings/ca/upload", handlers.HandleUploadRootCA)
+		admin.GET("/settings/ca/download", handlers.HandleDownloadRootCA)
+		admin.POST("/settings/ca/delete", handlers.HandleDeleteRootCA)
 	}
 
 	// Redirect root to /admin

@@ -15,6 +15,7 @@ type CertInfo struct {
 	NotAfter          time.Time
 	FingerprintSHA256 string
 	Domains           string
+	SubjectCN         string
 }
 
 func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
@@ -83,6 +84,7 @@ func ValidateAndParseCert(certPEM, keyPEM string) (*CertInfo, error) {
 		NotAfter:          cert.NotAfter,
 		FingerprintSHA256: fingerprint,
 		Domains:           domainsStr,
+		SubjectCN:         cert.Subject.CommonName,
 	}, nil
 }
 

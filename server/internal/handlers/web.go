@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var validCertNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 ._-]+$`)
+var validCertNameRegex = regexp.MustCompile(`^[a-z]([a-z0-9 ._-]*[a-z0-9])?$`)
 
 func isValidCertName(name string) bool {
 	if name == "" {
@@ -59,6 +60,8 @@ type CertViewModel struct {
 	EABKID             string
 	EABHMACKey         string
 	AutoRenew          bool
+	IsInternal         bool
+	Provider           string
 }
 
 type TokenViewModel struct {
@@ -238,6 +241,8 @@ func ShowDashboard(c *gin.Context) {
 			EABKID:             cert.EABKID,
 			EABHMACKey:         cert.EABHMACKey,
 			AutoRenew:          cert.AutoRenew,
+			IsInternal:         cert.Provider == "internal_ca",
+			Provider:           cert.Provider,
 		})
 	}
 
@@ -344,6 +349,14 @@ func ShowDashboard(c *gin.Context) {
 		"acmeDefaultGoDaddyToken":     db.GetSetting("acme_default_godaddy_token", ""),
 		"acmeDefaultZeroSSLKID":       db.GetSetting("acme_default_zerossl_kid", ""),
 		"acmeDefaultZeroSSLHMAC":      db.GetSetting("acme_default_zerossl_hmac", ""),
+		"hasInternalCA":               db.GetSetting("internal_ca_cert", "") != "",
+		"internalCACert":              db.GetSetting("internal_ca_cert", ""),
+		"internalCADefaultValidYears": db.GetSetting("internal_ca_default_valid_years", "50"),
+		"internalCADefaultOrg":        db.GetSetting("internal_ca_default_org", "Internal Network"),
+		"internalCADefaultOU":         db.GetSetting("internal_ca_default_ou", "IT Dept"),
+		"internalCADefaultCountry":    db.GetSetting("internal_ca_default_country", "VN"),
+		"internalCADefaultState":      db.GetSetting("internal_ca_default_state", "Hanoi"),
+		"internalCADefaultLocality":   db.GetSetting("internal_ca_default_locality", "Cau Giay"),
 	})
 }
 
@@ -505,6 +518,14 @@ func SaveSettings(c *gin.Context) {
 	_ = db.SetSetting("acme_default_godaddy_token", strings.TrimSpace(c.PostForm("acme_default_godaddy_token")))
 	_ = db.SetSetting("acme_default_zerossl_kid", strings.TrimSpace(c.PostForm("acme_default_zerossl_kid")))
 	_ = db.SetSetting("acme_default_zerossl_hmac", strings.TrimSpace(c.PostForm("acme_default_zerossl_hmac")))
+
+	// 3b. Internal CA Default Settings
+	_ = db.SetSetting("internal_ca_default_valid_years", strings.TrimSpace(c.PostForm("internal_ca_default_valid_years")))
+	_ = db.SetSetting("internal_ca_default_org", strings.TrimSpace(c.PostForm("internal_ca_default_org")))
+	_ = db.SetSetting("internal_ca_default_ou", strings.TrimSpace(c.PostForm("internal_ca_default_ou")))
+	_ = db.SetSetting("internal_ca_default_country", strings.TrimSpace(c.PostForm("internal_ca_default_country")))
+	_ = db.SetSetting("internal_ca_default_state", strings.TrimSpace(c.PostForm("internal_ca_default_state")))
+	_ = db.SetSetting("internal_ca_default_locality", strings.TrimSpace(c.PostForm("internal_ca_default_locality")))
 
 	if c.PostForm("enable_telegram") == "on" || c.PostForm("enable_telegram") == "true" {
 		_ = db.SetSetting("enable_telegram", "true")
@@ -700,7 +721,7 @@ func CheckCertName(c *gin.Context) {
 		return
 	}
 	if !isValidCertName(name) {
-		c.JSON(http.StatusOK, gin.H{"exists": false, "invalid": true, "message": "Only letters, numbers, space, dot (.), hyphen (-), and underscore (_) are allowed!"})
+		c.JSON(http.StatusOK, gin.H{"exists": false, "invalid": true, "message": "Must be lowercase (a-z), start with a letter, end with letter/digit, and have no leading/trailing spaces!"})
 		return
 	}
 	var existing models.Certificate
@@ -752,3 +773,192 @@ func TestNotification(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test notification sent successfully!"})
 }
+
+func HandleGenerateRootCA(c *gin.Context) {
+	cn := strings.TrimSpace(c.PostForm("common_name"))
+	if cn == "" {
+		cn = "Internal Root CA"
+	}
+	validYears, _ := strconv.Atoi(c.PostForm("valid_years"))
+	if validYears <= 0 {
+		validYears = 100
+	}
+
+	opts := crypto.RootCAOptions{
+		CommonName:   cn,
+		Organization: strings.TrimSpace(c.PostForm("organization")),
+		OU:           strings.TrimSpace(c.PostForm("ou")),
+		Country:      strings.TrimSpace(c.PostForm("country")),
+		State:        strings.TrimSpace(c.PostForm("state")),
+		Locality:     strings.TrimSpace(c.PostForm("locality")),
+		ValidYears:   validYears,
+		KeyType:      strings.TrimSpace(c.PostForm("key_type")),
+	}
+
+	certPEM, keyPEM, err := crypto.GenerateRootCA(opts)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to generate Root CA: " + err.Error()})
+		return
+	}
+
+	_ = db.SetSetting("internal_ca_cert", certPEM)
+	_ = db.SetSetting("internal_ca_key", keyPEM)
+
+	db.LogAudit(c.ClientIP(), "Generate Root CA", fmt.Sprintf("Generated new Internal Root CA '%s' (Valid: %d years)", cn, validYears))
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Internal Root CA generated successfully!"})
+}
+
+func HandleUploadRootCA(c *gin.Context) {
+	certPEM := strings.TrimSpace(c.PostForm("cert_data"))
+	keyPEM := strings.TrimSpace(c.PostForm("key_data"))
+
+	if certPEM == "" || keyPEM == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Root Certificate PEM and Private Key PEM are required"})
+		return
+	}
+
+	certInfo, err := crypto.ValidateAndParseCert(certPEM, keyPEM)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Invalid Root CA Certificate/Key: " + err.Error()})
+		return
+	}
+
+	_ = db.SetSetting("internal_ca_cert", certPEM)
+	_ = db.SetSetting("internal_ca_key", keyPEM)
+
+	db.LogAudit(c.ClientIP(), "Upload Root CA", fmt.Sprintf("Uploaded Internal Root CA '%s'", certInfo.SubjectCN))
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Internal Root CA uploaded successfully!"})
+}
+
+func HandleDownloadRootCA(c *gin.Context) {
+	certPEM := db.GetSetting("internal_ca_cert", "")
+	if certPEM == "" {
+		c.String(http.StatusNotFound, "Internal Root CA is not configured")
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename=\"root-ca.crt\"")
+	c.Data(http.StatusOK, "application/x-pem-file", []byte(certPEM))
+}
+
+func HandleDeleteRootCA(c *gin.Context) {
+	_ = db.SetSetting("internal_ca_cert", "")
+	_ = db.SetSetting("internal_ca_key", "")
+	db.LogAudit(c.ClientIP(), "Delete Root CA", "Deleted Internal Root CA certificate and key")
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Internal Root CA deleted successfully!"})
+}
+
+func HandleIssueInternalCert(c *gin.Context) {
+	name := strings.TrimSpace(c.PostForm("servercert_name"))
+	if !isValidCertName(name) {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Invalid+ServerCert+Name.+Only+letters,+numbers,+space,+dot+(.),+hyphen+(-),+and+underscore+(_)+are+allowed.")
+		return
+	}
+
+	rootCertPEM := db.GetSetting("internal_ca_cert", "")
+	rootKeyPEM := db.GetSetting("internal_ca_key", "")
+	if rootCertPEM == "" || rootKeyPEM == "" {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Internal+Root+CA+is+not+configured.+Please+generate+or+upload+Root+CA+in+Settings+first.")
+		return
+	}
+
+	domainStr := strings.TrimSpace(c.PostForm("domains"))
+	var domains []string
+	if domainStr != "" {
+		parts := strings.Split(domainStr, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				domains = append(domains, p)
+			}
+		}
+	}
+	if len(domains) == 0 {
+		c.Redirect(http.StatusSeeOther, "/admin?error=At+least+one+domain+or+IP+is+required")
+		return
+	}
+
+	validYears, _ := strconv.Atoi(c.PostForm("valid_years"))
+	if validYears <= 0 {
+		validYears, _ = strconv.Atoi(db.GetSetting("internal_ca_default_valid_years", "50"))
+		if validYears <= 0 {
+			validYears = 50
+		}
+	}
+
+	org := strings.TrimSpace(c.PostForm("organization"))
+	if org == "" {
+		org = db.GetSetting("internal_ca_default_org", "Internal Network")
+	}
+	ou := strings.TrimSpace(c.PostForm("ou"))
+	if ou == "" {
+		ou = db.GetSetting("internal_ca_default_ou", "IT Dept")
+	}
+	country := strings.TrimSpace(c.PostForm("country"))
+	if country == "" {
+		country = db.GetSetting("internal_ca_default_country", "VN")
+	}
+	state := strings.TrimSpace(c.PostForm("state"))
+	if state == "" {
+		state = db.GetSetting("internal_ca_default_state", "Hanoi")
+	}
+	locality := strings.TrimSpace(c.PostForm("locality"))
+	if locality == "" {
+		locality = db.GetSetting("internal_ca_default_locality", "Cau Giay")
+	}
+	keyType := strings.TrimSpace(c.PostForm("key_type"))
+
+	opts := crypto.InternalCertOptions{
+		RootCertPEM:  rootCertPEM,
+		RootKeyPEM:   rootKeyPEM,
+		Domains:      domains,
+		ValidYears:   validYears,
+		Organization: org,
+		OU:           ou,
+		Country:      country,
+		State:        state,
+		Locality:     locality,
+		KeyType:      keyType,
+	}
+
+	certPEM, keyPEM, err := crypto.IssueInternalCert(opts)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin?error=Failed+to+issue+internal+certificate:+"+url.QueryEscape(err.Error()))
+		return
+	}
+
+	certInfo, err := crypto.ValidateAndParseCert(certPEM, keyPEM)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/admin?error="+url.QueryEscape(err.Error()))
+		return
+	}
+
+	var existing models.Certificate
+	result := db.DB.Where("servercert_name = ?", name).First(&existing)
+	if result.Error == nil {
+		existing.CertData = certPEM
+		existing.KeyData = keyPEM
+		existing.FingerprintSHA256 = certInfo.FingerprintSHA256
+		existing.NotAfter = certInfo.NotAfter
+		existing.Domains = certInfo.Domains
+		existing.Provider = "internal_ca"
+		existing.IsACME = false
+		db.DB.Save(&existing)
+		db.LogAudit(c.ClientIP(), "Re-issue Internal Cert", fmt.Sprintf("Re-issued internal certificate '%s' (Valid: %d years)", name, validYears))
+	} else {
+		newCert := models.Certificate{
+			ServercertName:    name,
+			CertData:          certPEM,
+			KeyData:           keyPEM,
+			FingerprintSHA256: certInfo.FingerprintSHA256,
+			NotAfter:          certInfo.NotAfter,
+			Domains:           certInfo.Domains,
+			Provider:          "internal_ca",
+			IsACME:            false,
+		}
+		db.DB.Create(&newCert)
+		db.LogAudit(c.ClientIP(), "Issue Internal Cert", fmt.Sprintf("Issued new internal certificate '%s' (Valid: %d years)", name, validYears))
+	}
+
+	c.Redirect(http.StatusSeeOther, "/admin?msg=Internal+certificate+issued+successfully")
+}
+
